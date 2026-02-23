@@ -1,0 +1,8 @@
+{% extends "elections/base.html" %}
+{% block content %}
+<h2>Vote Received</h2>
+<p>Thank you. Your vote has been recorded.</p>
+<p><strong>Vote ID:</strong> {{ vote.id }}</p>
+<p><strong>Record hash:</strong> {{ vote.record_hash }}</p>
+<p>Keep this ID if you need to reference your participation (it does not reveal your ballot contents publicly).</p>
+{% endblock %}

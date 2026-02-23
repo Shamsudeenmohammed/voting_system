@@ -1,0 +1,12 @@
+{% extends "elections/base.html" %}
+{% block content %}
+<h2>{{ election.title }}</h2>
+<p>{{ election.description|linebreaks }}</p>
+<p><strong>Period:</strong> {{ election.start_at|date:"Y-m-d H:i" }} — {{ election.end_at|date:"Y-m-d H:i" }}</p>
+
+{% if open %}
+  <p>This election is open. <a href="{% url 'elections:start_vote' election.id %}">Cast your vote</a>.</p>
+{% else %}
+  <p>This election is not open now.</p>
+{% endif %}
+{% endblock %}

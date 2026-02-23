@@ -1,0 +1,15 @@
+{% extends "elections/base.html" %}
+{% block title %}Elections{% endblock %}
+{% block content %}
+<h2>Open Elections</h2>
+<ul>
+  {% for e in elections %}
+    <li>
+      <a href="{% url 'elections:detail' e.id %}">{{ e.title }}</a>
+      — {{ e.start_at|date:"Y-m-d H:i" }} to {{ e.end_at|date:"Y-m-d H:i" }}
+    </li>
+  {% empty %}
+    <li>No elections available.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

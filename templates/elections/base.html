@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}Voting System{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+  <header style="padding:16px;background:#003366;color:white;">
+    <a href="{% url 'elections:list' %}" style="color:white;text-decoration:none;"><h1>Voting System</h1></a>
+  </header>
+  <main style="padding:16px;">
+    {% if messages %}
+      <ul class="messages">
+        {% for m in messages %}
+          <li>{{ m }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer style="padding:12px;text-align:center;color:#666;">
+    &copy; {{ now.year }} Voting System
+  </footer>
+</body>
+</html>

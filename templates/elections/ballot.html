@@ -1,0 +1,35 @@
+<!-- templates/elections/ballot.html -->
+{% extends "elections/base.html" %}
+{% block content %}
+<h2>Ballot for "{{ election.title }}"</h2>
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+    <div style="margin-bottom:20px;">
+      <label><strong>{{ field.label }}</strong></label>
+      <div>
+        {% for choice in field.field.choices %}
+          <div style="margin:5px 0; display:flex; align-items:center;">
+            <input type="{{ field.field.widget.input_type }}"
+                   name="{{ field.html_name }}"
+                   value="{{ choice.0 }}" id="choice_{{ forloop.counter }}">
+            <label for="choice_{{ forloop.counter }}">
+              {{ choice.1 }}
+              {% with choice_id=choice.0 %}
+                {% for c in ballot.choices.all %}
+                  {% if c.id|stringformat:"s" == choice_id %}
+                    {% if c.image %}
+                      <img src="{{ c.image.url }}" alt="{{ c.text }}" width="80" height="80" style="margin-left:10px;">
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+              {% endwith %}
+            </label>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+  <button type="submit">Submit Vote</button>
+</form>
+{% endblock %}
