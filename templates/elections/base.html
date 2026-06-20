@@ -1,28 +1,43 @@
-{% load static %}
 <!doctype html>
+{% load static %}
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>{% block title %}Voting System{% endblock %}</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8">
+  <title>{% block title %}VoteSys{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <header style="padding:16px;background:#003366;color:white;">
-    <a href="{% url 'elections:list' %}" style="color:white;text-decoration:none;"><h1>Voting System</h1></a>
+  <header>
+    <div class="inner">
+      <div class="logo"><a href="{% url 'elections:home' %}">VoteSys</a></div>
+      <nav>
+        {% if user.is_authenticated and user.is_staff %}
+          <a href="{% url 'elections:admin_dashboard' %}">Dashboard</a>
+          <a href="{% url 'elections:list' %}">Elections</a>
+          <a href="{% url 'elections:logout' %}">Logout</a>
+        {% elif request.session.voter_id %}
+          <a href="{% url 'elections:logout' %}">Logout</a>
+        {% else %}
+          <a href="{% url 'elections:voter_login' %}">Voter Login</a>
+          <a href="{% url 'elections:admin_login' %}">Admin Login</a>
+        {% endif %}
+        <a href="{% url 'elections:list' %}">Elections</a>
+      </nav>
+    </div>
   </header>
-  <main style="padding:16px;">
+  <main>
     {% if messages %}
       <ul class="messages">
         {% for m in messages %}
-          <li>{{ m }}</li>
+          <li class="{{ m.tags }}">{{ m }}</li>
         {% endfor %}
       </ul>
     {% endif %}
     {% block content %}{% endblock %}
   </main>
-  <footer style="padding:12px;text-align:center;color:#666;">
-    &copy; {{ now.year }} Voting System
-  </footer>
+  <footer><p>VoteSys &mdash; Secure Voting Platform</p></footer>
+  {% block extra_js %}{% endblock %}
 </body>
 </html>

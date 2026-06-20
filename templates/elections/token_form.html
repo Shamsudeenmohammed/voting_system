@@ -1,9 +1,0 @@
-{% extends "elections/base.html" %}
-{% block content %}
-<h2>Enter Voting Token for "{{ election.title }}"</h2>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Proceed</button>
-</form>
-{% endblock %}

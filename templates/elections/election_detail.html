@@ -1,12 +1,30 @@
 {% extends "elections/base.html" %}
+{% block title %}{{ election.title }}{% endblock %}
 {% block content %}
+<div style="margin-bottom:16px;">
+  <span class="badge badge-category">{{ election.get_category_display }}</span>
+  <span class="badge {% if open %}badge-open{% else %}badge-closed{% endif %}">
+    {{ open|yesno:"Open,Closed" }}
+  </span>
+</div>
 <h2>{{ election.title }}</h2>
-<p>{{ election.description|linebreaks }}</p>
-<p><strong>Period:</strong> {{ election.start_at|date:"Y-m-d H:i" }} — {{ election.end_at|date:"Y-m-d H:i" }}</p>
+<p style="color:var(--gray-500);margin-top:4px;">
+  {{ election.get_ballot_type_display }} &middot;
+  {{ election.start_at|date:"M d, Y H:i" }} &mdash; {{ election.end_at|date:"M d, Y H:i" }}
+</p>
 
-{% if open %}
-  <p>This election is open. <a href="{% url 'elections:start_vote' election.id %}">Cast your vote</a>.</p>
-{% else %}
-  <p>This election is not open now.</p>
+{% if election.description %}
+  <div class="card" style="margin-top:20px;">{{ election.description|linebreaks }}</div>
 {% endif %}
+
+<div class="stats">
+  <div class="stat"><div class="num">{{ total_voters }}</div><div class="label">Registered</div></div>
+  <div class="stat"><div class="num">{{ voted_count }}</div><div class="label">Voted</div></div>
+  <div class="stat"><div class="num">{% widthratio voted_count total_voters 100 %}%</div><div class="label">Turnout</div></div>
+</div>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <a href="{% url 'elections:list' %}" class="btn btn-outline btn-sm">&larr; All Elections</a>
+          <a href="{% url 'elections:results' election.id %}" class="btn btn-outline btn-sm">View Results</a>
+</div>
 {% endblock %}

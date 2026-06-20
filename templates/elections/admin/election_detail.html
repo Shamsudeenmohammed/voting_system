@@ -1,0 +1,119 @@
+{% extends "elections/base.html" %}
+{% block title %}{{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-layout">
+  <nav class="admin-sidebar">
+    <div class="section-title">Admin</div>
+    <a href="{% url 'elections:admin_dashboard' %}">Dashboard</a>
+    <a href="{% url 'elections:admin_election_new' %}">+ New Election</a>
+    <div class="section-title">This Election</div>
+    <a href="{% url 'elections:admin_election_detail' election.id %}" class="active">{{ election.title|truncatechars:24 }}</a>
+    <a href="{% url 'elections:admin_voters' election.id %}">Voters</a>
+    <a href="{% url 'elections:admin_voters_upload' election.id %}">Upload Voters</a>
+    <a href="{% url 'elections:results' election.id %}">Results</a>
+  </nav>
+
+  <div class="admin-content">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+      <div>
+        <span class="badge badge-category">{{ election.get_category_display }}</span>
+        <span class="badge {% if election.is_open %}badge-open{% elif election.is_published %}badge-closed{% else %}badge-closed{% endif %}">
+          {% if election.is_open %}Open{% elif election.is_published %}Closed{% else %}Draft{% endif %}
+        </span>
+        <h2 style="margin-top:8px;">{{ election.title }}</h2>
+        <p style="color:var(--gray-500);font-size:.875rem;">{{ election.start_at|date:"M d, Y H:i" }} — {{ election.end_at|date:"M d, Y H:i" }}</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="{% url 'elections:admin_election_edit' election.id %}" class="btn btn-sm btn-outline">Edit</a>
+        <a href="{% url 'elections:admin_election_toggle' election.id %}" class="btn btn-sm {% if election.is_published %}btn-outline{% else %}btn-success{% endif %}">
+          {% if election.is_published %}Unpublish{% else %}Publish{% endif %}
+        </a>
+        <a href="{% url 'elections:admin_election_delete' election.id %}" class="btn btn-sm btn-outline" style="color:var(--danger);border-color:var(--danger);">Delete</a>
+      </div>
+    </div>
+
+    <div class="stats" style="margin-bottom:20px;">
+      <div class="stat"><div class="num">{{ election.total_voters }}</div><div class="label">Voters</div></div>
+      <div class="stat"><div class="num">{{ election.voted_count }}</div><div class="label">Voted</div></div>
+      <div class="stat"><div class="num">{% widthratio election.voted_count election.total_voters 100 %}%</div><div class="label">Turnout</div></div>
+      <div class="stat"><div class="num">{{ positions|length }}</div><div class="label">Positions</div></div>
+    </div>
+
+    <div class="inline-section">
+      <h3>Positions &amp; Candidates
+        <a href="{% url 'elections:admin_position_new' election.id %}" class="btn btn-sm btn-primary">+ Add Position</a>
+      </h3>
+      {% for pos in positions %}
+        <div class="card" style="padding:16px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div>
+              <strong style="font-size:.9375rem;">{{ pos.title }}</strong>
+              {% if pos.description %}<p style="color:var(--gray-500);font-size:.8125rem;margin-top:2px;">{{ pos.description }}</p>{% endif %}
+            </div>
+            <div class="action-links">
+              <a href="{% url 'elections:admin_position_edit' election.id pos.id %}">Edit</a>
+              <a href="{% url 'elections:admin_candidate_new' election.id pos.id %}">+ Candidate</a>
+              <a href="{% url 'elections:admin_position_delete' election.id pos.id %}" class="danger">Delete</a>
+            </div>
+          </div>
+          {% if pos.candidates.all %}
+            <div style="display:grid;gap:6px;">
+              {% for c in pos.candidates.all %}
+                <div class="inline-card">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    {% if c.photo %}<img src="{{ c.photo.url }}" alt="" style="width:36px;height:36px;object-fit:cover;">{% endif %}
+                    <div>
+                      <strong>{{ c.full_name }}</strong>
+                      {% if c.bio %}<p style="font-size:.8125rem;color:var(--gray-500);">{{ c.bio }}</p>{% endif %}
+                    </div>
+                  </div>
+                  <div class="action-links">
+                    <a href="{% url 'elections:admin_candidate_edit' election.id pos.id c.id %}">Edit</a>
+                    <a href="{% url 'elections:admin_candidate_delete' election.id pos.id c.id %}" class="danger">Delete</a>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p style="color:var(--gray-400);font-size:.8125rem;padding:8px 0;">No candidates yet.</p>
+          {% endif %}
+        </div>
+      {% empty %}
+        <div class="card" style="text-align:center;padding:32px;">
+          <p style="color:var(--gray-400);">No positions configured. <a href="{% url 'elections:admin_position_new' election.id %}">Add one</a>.</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="inline-section">
+      <h3>Voters
+        <span style="font-size:.8125rem;font-weight:400;color:var(--gray-500);">
+          {{ election.voted_count }} voted / {{ election.total_voters }} registered
+        </span>
+        <div style="display:flex;gap:6px;">
+          <a href="{% url 'elections:admin_voters' election.id %}" class="btn btn-sm btn-outline">View All</a>
+          <a href="{% url 'elections:admin_voters_upload' election.id %}" class="btn btn-sm btn-outline">Upload CSV</a>
+        </div>
+      </h3>
+      <div class="card" style="padding:0;">
+        <table>
+          <thead><tr><th>#</th><th>Voter ID</th><th>Name</th><th>Token</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for v in voters|slice:":10" %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ v.voter_id }}</td>
+                <td>{{ v.full_name|default:"—" }}</td>
+                <td><span class="token-display">{{ v.token }}</span></td>
+                <td>{% if v.has_voted %}<span class="badge badge-open">Voted</span>{% else %}<span class="badge badge-closed">Pending</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" style="text-align:center;color:var(--gray-400);">No voters. <a href="{% url 'elections:admin_voters_upload' election.id %}">Upload CSV</a>.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "elections/base.html" %}
+{% block title %}Voter Login{% endblock %}
+{% block content %}
+<div class="login-card card">
+  <h3 style="margin-bottom:4px;">Voter Login</h3>
+  <p style="color:var(--gray-500);font-size:.875rem;margin-bottom:20px;">
+    Enter your voter ID and the token provided by your election administrator.
+  </p>
+  <form method="post" action="{% url 'elections:voter_login' %}">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="id_voter_id">Voter ID</label>
+      <input type="text" name="voter_id" id="id_voter_id" placeholder="Enter your voter ID" required autofocus>
+    </div>
+    <div class="form-group">
+      <label for="id_token">Token</label>
+      <input type="password" name="token" id="id_token" placeholder="Enter your token" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+  </form>
+  <p style="margin-top:16px;font-size:.8125rem;color:var(--gray-400);text-align:center;">
+    Don't have a token? Contact your election administrator.
+  </p>
+</div>
+{% endblock %}

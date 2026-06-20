@@ -1,0 +1,87 @@
+{% extends "elections/base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="admin-layout">
+  <nav class="admin-sidebar">
+    <div class="section-title">Admin</div>
+    <a href="{% url 'elections:admin_dashboard' %}" class="active">Dashboard</a>
+    <a href="{% url 'elections:admin_election_new' %}">+ New Election</a>
+    <div class="section-title">Elections</div>
+    {% for e in elections|slice:":10" %}
+      <a href="{% url 'elections:admin_election_detail' e.id %}">{{ e.title|truncatechars:24 }}</a>
+    {% endfor %}
+    <div class="section-title" style="margin-top:8px;">
+      <a href="{% url 'elections:logout' %}" style="color:var(--danger);">Logout</a>
+    </div>
+  </nav>
+
+  <div class="admin-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2>Dashboard</h2>
+      <a href="{% url 'elections:admin_election_new' %}" class="btn btn-primary btn-sm">+ New Election</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="num">{{ elections|length }}</div><div class="label">Elections</div></div>
+      <div class="stat"><div class="num">{{ total_voters }}</div><div class="label">Voters</div></div>
+      <div class="stat"><div class="num">{{ total_votes }}</div><div class="label">Votes Cast</div></div>
+      <div class="stat"><div class="num">{% widthratio total_votes total_voters 100 %}%</div><div class="label">Turnout</div></div>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <table>
+        <thead>
+          <tr>
+            <th>Election</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Voters</th>
+            <th>Turnout</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in elections %}
+            <tr>
+              <td><strong>{{ e.title }}</strong></td>
+              <td>{{ e.get_category_display }}</td>
+              <td>
+                {% if e.is_open %}<span class="badge badge-open">Open</span>
+                {% elif e.is_published %}<span class="badge badge-closed">Closed</span>
+                {% else %}<span class="badge badge-closed">Draft</span>{% endif %}
+              </td>
+              <td>{{ e.total_voters }}</td>
+              <td>{% widthratio e.voted_count e.total_voters 100 %}% ({{ e.voted_count }}/{{ e.total_voters }})</td>
+              <td class="action-links">
+                <a href="{% url 'elections:admin_election_detail' e.id %}">Manage</a>
+                <a href="{% url 'elections:admin_election_edit' e.id %}">Edit</a>
+                <a href="{% url 'elections:results' e.id %}">Results</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:32px;">No elections yet. <a href="{% url 'elections:admin_election_new' %}">Create one</a>.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if logs %}
+      <div class="card" style="padding:0;margin-top:20px;">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--gray-200);font-weight:600;font-size:.875rem;">Recent Activity</div>
+        <table>
+          <thead><tr><th>Time</th><th>Action</th><th>User</th></tr></thead>
+          <tbody>
+            {% for log in logs %}
+              <tr>
+                <td style="font-size:.8125rem;color:var(--gray-500);">{{ log.timestamp|date:"M d, H:i" }}</td>
+                <td>{{ log.action }}</td>
+                <td>{{ log.user|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

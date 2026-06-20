@@ -1,0 +1,32 @@
+{% extends "elections/base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<div style="text-align:center;padding:60px 20px;max-width:600px;margin:0 auto;">
+  <h1 style="font-size:2rem;margin-bottom:8px;">VoteSys</h1>
+  <p style="color:var(--gray-500);font-size:1.0625rem;margin-bottom:40px;">
+    Secure Universal Voting Platform
+  </p>
+  <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+    <a href="{% url 'elections:voter_login' %}" class="btn btn-primary" style="padding:14px 40px;font-size:1rem;">
+      Voter Login
+    </a>
+    <a href="{% url 'elections:admin_login' %}" class="btn btn-outline" style="padding:14px 40px;font-size:1rem;">
+      Admin Login
+    </a>
+  </div>
+  <div style="margin-top:48px;display:flex;gap:24px;justify-content:center;flex-wrap:wrap;">
+    <div class="card" style="max-width:180px;padding:20px;">
+      <div style="font-size:2rem;font-weight:700;color:var(--primary);">1</div>
+      <div style="font-size:.8125rem;color:var(--gray-500);">Admin creates election &amp; uploads voters</div>
+    </div>
+    <div class="card" style="max-width:180px;padding:20px;">
+      <div style="font-size:2rem;font-weight:700;color:var(--primary);">2</div>
+      <div style="font-size:.8125rem;color:var(--gray-500);">Voter logs in with ID + token</div>
+    </div>
+    <div class="card" style="max-width:180px;padding:20px;">
+      <div style="font-size:2rem;font-weight:700;color:var(--primary);">3</div>
+      <div style="font-size:.8125rem;color:var(--gray-500);">Cast vote securely &amp; view results</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

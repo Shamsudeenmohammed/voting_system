@@ -1,0 +1,61 @@
+{% extends "elections/base.html" %}
+{% block title %}{{ election.title }} — Admin{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <div>
+    <a href="{% url 'elections:admin_dashboard' %}" style="color:var(--gray-500);font-size:.875rem;text-decoration:none;">&larr; Dashboard</a>
+    <h2 style="margin-top:4px;">{{ election.title }}</h2>
+    <p style="color:var(--gray-500);font-size:.875rem;">
+      {{ election.get_category_display }} &middot; {{ election.get_ballot_type_display }}
+      &middot; {{ election.start_at|date:"M d, Y H:i" }} &mdash; {{ election.end_at|date:"M d, Y H:i" }}
+    </p>
+  </div>
+  <div>
+    <a href="{% url 'admin:elections_election_change' election.id %}" class="btn btn-primary btn-sm">Edit</a>
+    <a href="{% url 'elections:results' election.id %}" class="btn btn-outline btn-sm">Results</a>
+  </div>
+</div>
+
+<div class="stats" style="margin-bottom:20px;">
+  <div class="stat"><div class="num">{{ election.total_voters }}</div><div class="label">Voters</div></div>
+  <div class="stat"><div class="num">{{ election.voted_count }}</div><div class="label">Voted</div></div>
+  <div class="stat"><div class="num">{% widthratio election.voted_count election.total_voters 100 %}%</div><div class="label">Turnout</div></div>
+</div>
+
+<div class="card" style="padding:0;">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Voter ID</th>
+        <th>Full Name</th>
+        <th>Email</th>
+        <th>Token</th>
+        <th>Status</th>
+        <th>Voted At</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in voters %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td>{{ v.voter_id }}</td>
+          <td>{{ v.full_name|default:"—" }}</td>
+          <td>{{ v.email|default:"—" }}</td>
+          <td style="font-family:monospace;font-size:.8125rem;">{{ v.token }}</td>
+          <td>
+            {% if v.has_voted %}
+              <span class="badge badge-open">Voted</span>
+            {% else %}
+              <span class="badge badge-closed">Pending</span>
+            {% endif %}
+          </td>
+          <td>{{ v.voted_at|date:"M d, H:i"|default:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" style="text-align:center;color:var(--gray-400);">No voters registered.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

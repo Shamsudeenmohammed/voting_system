@@ -1,0 +1,17 @@
+{% extends "elections/base.html" %}
+{% block title %}Confirm{% endblock %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:40px auto;text-align:center;">
+  <h3 style="margin-bottom:12px;">Confirm {{ type|title }}</h3>
+  <p style="color:var(--gray-500);margin-bottom:20px;">
+    Are you sure you want to {{ action|default:"delete" }} <strong>"{{ obj }}"</strong>?
+  </p>
+  <form method="post">
+    {% csrf_token %}
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button type="submit" class="btn btn-danger">Confirm</button>
+      <a href="javascript:history.back()" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

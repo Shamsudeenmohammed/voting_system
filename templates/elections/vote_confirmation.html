@@ -1,8 +1,35 @@
 {% extends "elections/base.html" %}
+{% block title %}Vote Cast{% endblock %}
 {% block content %}
-<h2>Vote Received</h2>
-<p>Thank you. Your vote has been recorded.</p>
-<p><strong>Vote ID:</strong> {{ vote.id }}</p>
-<p><strong>Record hash:</strong> {{ vote.record_hash }}</p>
-<p>Keep this ID if you need to reference your participation (it does not reveal your ballot contents publicly).</p>
+<div class="card confirm">
+  <div class="icon">&#10003;</div>
+  <h2>Your vote has been recorded.</h2>
+  <p style="color:var(--gray-500);margin-top:8px;">
+    Thank you for participating in <strong>{{ election.title }}</strong>.
+  </p>
+  <p style="margin-top:16px;font-size:.875rem;color:var(--gray-400);">
+    Redirecting to login in <span id="countdown">5</span>s...
+  </p>
+  <div style="margin-top:12px;">
+    {% comment %} <a href="{% url 'elections:voters_login' election.id %}" class="btn btn-primary">View Live Results</a> {% endcomment %}
+    <a href="{% url 'elections:home' %}" class="btn" style="margin-left:8px;">Done</a>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function() {
+  var sec = 5;
+  var el = document.getElementById('countdown');
+  var url = "{% url 'elections:voter_login' %}";
+  var t = setInterval(function() {
+    sec--;
+    if (el) el.textContent = sec;
+    if (sec <= 0) {
+      clearInterval(t);
+      window.location.href = url;
+    }
+  }, 1000);
+})();
+</script>
 {% endblock %}
