@@ -1,39 +1,76 @@
+"""URL routing for the elections app (public + management surfaces)."""
 from django.urls import path
+
 from . import views
 
-app_name = "elections"
-
 urlpatterns = [
+    # public
     path("", views.home, name="home"),
-    path("login/", views.voter_login_view, name="voter_login"),
-    path("login/admin/", views.admin_login_view, name="admin_login"),
-    path("logout/", views.logout_view, name="logout"),
-    path("elections/", views.election_list, name="list"),
-    path("elections/<uuid:election_id>/", views.election_detail, name="detail"),
-    path("elections/<uuid:election_id>/ballot/", views.ballot, name="ballot"),
-    path("elections/<uuid:election_id>/confirmed/", views.vote_confirmation, name="vote_confirmation"),
-    path("elections/<uuid:election_id>/results/", views.results, name="results"),
-    path("api/elections/<uuid:election_id>/results/", views.api_results, name="api_results"),
-
-    # Custom Admin (using /dashboard/ to avoid Django admin conflict)
-    path("dashboard/", views.admin_dashboard, name="admin_dashboard"),
-    path("dashboard/elections/new/", views.admin_election_new, name="admin_election_new"),
-    path("dashboard/elections/<uuid:election_id>/", views.admin_election_detail, name="admin_election_detail"),
-    path("dashboard/elections/<uuid:election_id>/edit/", views.admin_election_edit, name="admin_election_edit"),
-    path("dashboard/elections/<uuid:election_id>/delete/", views.admin_election_delete, name="admin_election_delete"),
-    path("dashboard/elections/<uuid:election_id>/toggle/", views.admin_election_toggle, name="admin_election_toggle"),
-
-    path("dashboard/elections/<uuid:election_id>/positions/new/", views.admin_position_new, name="admin_position_new"),
-    path("dashboard/elections/<uuid:election_id>/positions/<uuid:position_id>/edit/", views.admin_position_edit, name="admin_position_edit"),
-    path("dashboard/elections/<uuid:election_id>/positions/<uuid:position_id>/delete/", views.admin_position_delete, name="admin_position_delete"),
-
-    path("dashboard/elections/<uuid:election_id>/positions/<uuid:position_id>/candidates/new/", views.admin_candidate_new, name="admin_candidate_new"),
-    path("dashboard/elections/<uuid:election_id>/positions/<uuid:position_id>/candidates/<uuid:candidate_id>/edit/", views.admin_candidate_edit, name="admin_candidate_edit"),
-    path("dashboard/elections/<uuid:election_id>/positions/<uuid:position_id>/candidates/<uuid:candidate_id>/delete/", views.admin_candidate_delete, name="admin_candidate_delete"),
-
-    path("dashboard/elections/<uuid:election_id>/voters/", views.admin_voters, name="admin_voters"),
-    path("api/elections/<uuid:election_id>/voters/", views.api_voters, name="api_voters"),
-    path("dashboard/elections/<uuid:election_id>/voters/upload/", views.admin_voters_upload, name="admin_voters_upload"),
-    path("dashboard/elections/<uuid:election_id>/voters/<uuid:voter_id>/reset/", views.admin_voter_reset, name="admin_voter_reset"),
-    path("dashboard/elections/<uuid:election_id>/voters/<uuid:voter_id>/regenerate-token/", views.admin_voter_regenerate_token, name="admin_voter_regenerate_token"),
+    path("elections/<uuid:pk>/", views.election_detail, name="election_detail"),
+    path("elections/<uuid:pk>/access/", views.voter_access, name="voter_access"),
+    # management
+    path("dashboard/", views.dashboard, name="dashboard"),
+    path("dashboard/elections/new/", views.election_create, name="election_create"),
+    path("dashboard/elections/<uuid:pk>/edit/", views.election_edit, name="election_edit"),
+    path("dashboard/elections/<uuid:pk>/config/", views.election_config, name="election_config"),
+    path("dashboard/elections/<uuid:pk>/voters/", views.election_voters, name="election_voters"),
+    path("dashboard/elections/<uuid:pk>/audit/", views.election_audit, name="election_audit"),
+    path(
+        "dashboard/elections/<uuid:pk>/audit/checkpoint/",
+        views.audit_checkpoint,
+        name="audit_checkpoint",
+    ),
+    path("dashboard/elections/<uuid:pk>/action/", views.election_action, name="election_action"),
+    path(
+        "dashboard/elections/<uuid:pk>/approvals/new/",
+        views.approval_request_view,
+        name="approval_request",
+    ),
+    path(
+        "dashboard/approvals/<uuid:approval_pk>/decide/",
+        views.approval_decide_view,
+        name="approval_decide",
+    ),
+    # ballot structure
+    path(
+        "dashboard/elections/<uuid:pk>/positions/new/",
+        views.position_add,
+        name="position_add",
+    ),
+    path(
+        "dashboard/elections/<uuid:pk>/positions/<uuid:position_id>/delete/",
+        views.position_delete,
+        name="position_delete",
+    ),
+    path(
+        "dashboard/elections/<uuid:pk>/positions/<uuid:position_id>/candidates/new/",
+        views.candidate_add,
+        name="candidate_add",
+    ),
+    path(
+        "dashboard/elections/<uuid:pk>/candidates/<uuid:candidate_id>/delete/",
+        views.candidate_delete,
+        name="candidate_delete",
+    ),
+    path(
+        "dashboard/elections/<uuid:pk>/stations/new/",
+        views.station_add,
+        name="station_add",
+    ),
+    # voter registry
+    path(
+        "dashboard/elections/<uuid:pk>/voters/add/",
+        views.voter_add,
+        name="voter_add",
+    ),
+    path(
+        "dashboard/elections/<uuid:pk>/voters/bulk/",
+        views.voter_bulk_add,
+        name="voter_bulk_add",
+    ),
+    path(
+        "dashboard/elections/<uuid:pk>/voters/<uuid:voter_pk>/revoke/",
+        views.voter_revoke,
+        name="voter_revoke",
+    ),
 ]

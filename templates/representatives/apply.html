@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Representative application · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>Representative application</h1>
+    <p class="hint">Apply to observe the process for a candidate in
+      <strong>{{ election.title }}</strong>. Approved representatives may monitor
+      aggregate progress and raise incidents — never ballots or voter identities.</p>
+    {% if error %}<p class="messages error">{{ error }}</p>{% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="id_candidate">Candidate</label>
+        <select class="input" name="candidate" id="id_candidate" required>
+          {% for c in candidates %}<option value="{{ c.pk }}">{{ c.full_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label for="id_full_name">Full name</label>
+        <input class="input" type="text" name="full_name" id="id_full_name" required></div>
+      <div class="form-group"><label for="id_email">Email</label>
+        <input class="input" type="email" name="email" id="id_email" required></div>
+      <div class="form-group"><label for="id_phone">Phone (optional)</label>
+        <input class="input" type="text" name="phone" id="id_phone"></div>
+      <button class="btn btn-primary btn-block" type="submit">Submit application</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

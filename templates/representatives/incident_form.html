@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Report incident · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>Report an incident</h1>
+    <p class="hint">{{ election.title }} — reports are audited and visible to election
+      officials. Never include ballot selections or voter credentials.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-group"><label for="id_title">Title</label>
+        <input class="input" type="text" name="title" id="id_title" required></div>
+      <div class="form-group"><label for="id_description">What happened?</label>
+        <textarea class="input" name="description" id="id_description" rows="4" required></textarea></div>
+      <div class="form-group"><label for="id_category">Category</label>
+        <select class="input" name="category" id="id_category">
+          <option value="incident">Operational incident</option>
+          <option value="objection">Objection</option>
+          <option value="dispute">Dispute / appeal</option>
+          <option value="eligibility">Eligibility challenge</option>
+          <option value="other">Other</option>
+        </select></div>
+      <div class="form-group"><label for="id_severity">Severity</label>
+        <select class="input" name="severity" id="id_severity">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select></div>
+      <div class="form-group"><label for="id_station">Station (optional)</label>
+        <select class="input" name="station" id="id_station">
+          <option value="">—</option>
+          {% for s in stations %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
+        </select></div>
+      <button class="btn btn-primary btn-block" type="submit">Submit report</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

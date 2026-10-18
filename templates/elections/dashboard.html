@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · VoteSys{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <div class="admin-layout">
+    <aside class="admin-sidebar">
+      <h2>Elections</h2>
+      <form method="get">
+        <div class="form-group">{{ form.q }}</div>
+        <div class="form-group">{{ form.state }}</div>
+        <button class="btn btn-sm btn-outline" type="submit">Filter</button>
+      </form>
+      <p><a class="btn btn-primary btn-sm" href="{% url 'election_create' %}">New election</a></p>
+      {% if orgs %}
+        <h3>Organizations</h3>
+        <ul>
+          {% for o in orgs %}<li>{{ o.name }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </aside>
+    <div class="admin-content">
+      <h1>Election dashboard</h1>
+      <table>
+        <thead><tr><th>Election</th><th>State</th><th>Voters</th><th>Candidates</th><th></th></tr></thead>
+        <tbody>
+          {% for e in elections %}
+            <tr>
+              <td>{{ e.title }} <span class="hint">({{ e.organization.name }})</span></td>
+              <td><span class="badge {{ e.state_badge }}">{{ e.get_state_display }}</span></td>
+              <td>{{ e.voter_count }}</td>
+              <td>{{ e.candidate_count }}</td>
+              <td class="action-links">
+                {% if e.pk|stringformat:'s' in manage_ids or e.pk in manage_ids %}
+                  <a href="{% url 'election_config' e.pk %}">Configure</a>
+                  <a href="{% url 'election_voters' e.pk %}">Voters</a>
+                  <a href="{% url 'monitor' e.pk %}">Monitor</a>
+                {% endif %}
+                <a href="{% url 'election_audit' e.pk %}">Audit</a>
+                <a href="{% url 'election_detail' e.pk %}">View</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">No elections yet — create your first one.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Ballot · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Official ballot — {{ election.title }}</h1>
+  <p class="hint">Make your selections carefully: once submitted, your ballot is sealed
+    and cannot be changed. No one — including election administrators — can link any
+    ballot back to you.</p>
+
+  {% if error %}<p class="messages error">{{ error }}</p>{% endif %}
+
+  <form method="post" id="ballot-form">
+    {% csrf_token %}
+    <input type="hidden" name="submission_id" value="{{ submission_id }}">
+
+    {% for row in rows %}
+      <section class="position-section card">
+        <div class="position-header">
+          <h2>{{ row.position.title }}
+            <span class="hint">
+              {% if row.config.max_choices > 1 %}
+                choose up to {{ row.config.max_choices }}
+              {% else %}
+                choose one
+              {% endif %}
+            </span>
+          </h2>
+        </div>
+        <div class="candidate-grid">
+          {% for c in row.candidates %}
+            <label class="candidate-card candidate-check">
+              <input type="{% if row.config.max_choices > 1 %}checkbox{% else %}radio{% endif %}"
+                     name="{{ row.position.pk }}" value="{{ c.pk }}">
+              <div class="candidate-info">
+                <div class="candidate-name">{{ c.full_name }}</div>
+                {% if c.bio %}<div class="candidate-bio">{{ c.bio }}</div>{% endif %}
+                {% if c.manifesto %}<div class="hint">{{ c.manifesto|truncatechars:200 }}</div>{% endif %}
+              </div>
+            </label>
+          {% empty %}
+            <p class="hint">No candidates available for this position.</p>
+          {% endfor %}
+        </div>
+        {% if allow_blank %}
+          <p class="hint"><label><input type="checkbox" name="__blank_{{ row.position.pk }}"
+             value="1" onclick="uncheckGroup('{{ row.position.pk }}', this)"> Leave this position blank</label></p>
+        {% endif %}
+      </section>
+    {% endfor %}
+
+    <button class="btn btn-primary btn-block" type="submit"
+            onclick="return confirm('Seal and submit your ballot? It cannot be changed afterwards.');">
+      Seal and submit my ballot
+    </button>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function uncheckGroup(name, box) {
+  if (!box.checked) return;
+  document.querySelectorAll('input[name="' + name + '"]').forEach(function (el) {
+    if (el !== box) el.checked = false;
+  });
+}
+</script>
+{% endblock %}

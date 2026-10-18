@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Representative dashboard{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Representative dashboard</h1>
+  <p class="hint">{{ rep.full_name }} — for {{ rep.candidate.full_name }} ·
+    {{ election.title }} ·
+    <a href="{% url 'incident_create' election.pk %}">Report an incident</a> ·
+    <a href="{% url 'incident_list' election.pk %}">My incidents</a></p>
+
+  <section class="card inline-section">
+    <h2>Turnout (aggregate)</h2>
+    <p class="stat">{{ turnout.voted }} / {{ turnout.total }} voted
+      ({% if turnout.total %}{{ turnout.percent }}%{% else %}—{% endif %})</p>
+    <p class="hint">Aggregate counts only. Ballots, selections and voter identities are
+      never exposed to representatives.</p>
+  </section>
+
+  <section class="card inline-section">
+    <h2>Ballots received per station</h2>
+    <table>
+      <thead><tr><th>Station</th><th>Ballots</th></tr></thead>
+      <tbody>
+        {% for s in stations %}<tr><td>{{ s.station.name }}</td><td>{{ s.ballots }}</td></tr>{% empty %}
+          <tr><td colspan="2" class="hint">No polling stations configured.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card inline-section">
+    <h2>My accreditation visits</h2>
+    <ul>
+      {% for a in attendance %}<li>Arrived {{ a.arrived_at|date:"Y-m-d H:i" }}{% if a.left_at %} — left {{ a.left_at|date:"H:i" }}{% endif %}</li>{% empty %}
+        <li class="hint">No visits recorded.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

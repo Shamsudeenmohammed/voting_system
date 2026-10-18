@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Ballot received · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>Your ballot has been sealed</h1>
+    {% if idempotent %}
+      <p class="hint">This submission was already accepted — here is your original receipt.</p>
+    {% endif %}
+    <p>Keep this receipt. It proves your ballot was accepted <strong>without</strong>
+      revealing its contents or linking it to you.</p>
+    <div class="token-display">{{ receipt_code }}</div>
+    <p class="hint">Ballot hash: <code>{{ ballot_hash }}</code><br>
+       Ballot box sequence: #{{ box_seq }}</p>
+    <p>
+      <a class="btn btn-outline" href="{% url 'receipt_lookup' election.pk %}?code={{ receipt_code }}">
+        Verify this receipt
+      </a>
+      <a class="btn btn-outline" href="{% url 'election_detail' election.pk %}">Back to election</a>
+    </p>
+    <p class="hint">You may close this page now. Your identity was not recorded with your
+      ballot and cannot be reconstructed by anyone, including administrators.</p>
+  </div>
+</div>
+{% endblock %}

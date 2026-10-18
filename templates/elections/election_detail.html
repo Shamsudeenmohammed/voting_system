@@ -1,30 +1,70 @@
-{% extends "elections/base.html" %}
-{% block title %}{{ election.title }}{% endblock %}
+{% extends "base.html" %}
+{% block title %}{{ election.title }} · VoteSys{% endblock %}
 {% block content %}
-<div style="margin-bottom:16px;">
-  <span class="badge badge-category">{{ election.get_category_display }}</span>
-  <span class="badge {% if open %}badge-open{% else %}badge-closed{% endif %}">
-    {{ open|yesno:"Open,Closed" }}
-  </span>
-</div>
-<h2>{{ election.title }}</h2>
-<p style="color:var(--gray-500);margin-top:4px;">
-  {{ election.get_ballot_type_display }} &middot;
-  {{ election.start_at|date:"M d, Y H:i" }} &mdash; {{ election.end_at|date:"M d, Y H:i" }}
-</p>
+<div class="admin-content">
+  <h1>{{ election.title }}</h1>
+  <p>
+    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
+    &middot; {{ election.get_category_display }}
+    &middot; {{ election.get_ballot_type_display }}
+  </p>
+  {% if election.description %}<p>{{ election.description }}</p>{% endif %}
+  <p class="hint">
+    Voting period: {{ election.start_at|date:"Y-m-d H:i" }} &rarr;
+    {{ election.end_at|date:"Y-m-d H:i" }} &middot;
+    Organization: {{ election.organization.name }}
+  </p>
 
-{% if election.description %}
-  <div class="card" style="margin-top:20px;">{{ election.description|linebreaks }}</div>
-{% endif %}
+  {% if open_for_voting %}
+    <p><a class="btn btn-primary" href="{% url 'voter_access' election.pk %}">Enter your voter ID to vote</a></p>
+  {% endif %}
 
-<div class="stats">
-  <div class="stat"><div class="num">{{ total_voters }}</div><div class="label">Registered</div></div>
-  <div class="stat"><div class="num">{{ voted_count }}</div><div class="label">Voted</div></div>
-  <div class="stat"><div class="num">{% widthratio voted_count total_voters 100 %}%</div><div class="label">Turnout</div></div>
-</div>
+  <h2>Ballot</h2>
+  {% if positions %}
+    {% for row in positions %}
+      <section class="position-section card">
+        <div class="position-header">
+          <h3>{{ row.position.title }}
+            {% if row.position.max_choices > 1 %}
+              <span class="hint">(choose up to {{ row.position.max_choices }})</span>
+            {% endif %}
+          </h3>
+        </div>
+        <div class="candidate-grid">
+          {% for c in row.candidates %}
+            <div class="candidate-card">
+              <div class="candidate-info">
+                <div class="candidate-name">{{ c.full_name }}</div>
+                {% if c.bio %}<div class="candidate-bio">{{ c.bio }}</div>{% endif %}
+                {% if c.manifesto %}<div class="hint">{{ c.manifesto|truncatechars:160 }}</div>{% endif %}
+              </div>
+            </div>
+          {% empty %}
+            <p class="hint">No approved candidates for this position yet.</p>
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  {% else %}
+    <p class="hint">The ballot is being prepared.</p>
+  {% endif %}
 
-<div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <a href="{% url 'elections:list' %}" class="btn btn-outline btn-sm">&larr; All Elections</a>
-          <a href="{% url 'elections:results' election.id %}" class="btn btn-outline btn-sm">View Results</a>
+  {% if results_visible and snapshot %}
+    <h2>Certified results</h2>
+    <p><a class="btn btn-success" href="{% url 'results' election.pk %}">View results (v{{ snapshot.version }})</a></p>
+  {% elif snapshot and privileged %}
+    <p><a class="btn btn-outline" href="{% url 'results' election.pk %}">View results (officials)</a></p>
+  {% endif %}
+
+  <p class="hint">
+    <a href="{% url 'receipt_lookup' election.pk %}">Verify a ballot receipt</a>
+    {% if election.state == election.STATE_CLOSED %}
+      &middot; <a href="{% url 'incident_create' election.pk %}">Report an incident</a>
+    {% endif %}
+    {% if can_manage %}
+      &middot; <a href="{% url 'election_config' election.pk %}">Manage</a>
+      &middot; <a href="{% url 'monitor' election.pk %}">Live monitor</a>
+    {% endif %}
+  </p>
 </div>
 {% endblock %}

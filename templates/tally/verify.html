@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Verify tally · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Independent verification — {{ election.title }} v{{ snapshot.version }}</h1>
+  <p class="hint">The count was re-run from the sealed ballots and frozen configuration
+    and compared byte-for-byte with the stored snapshot.</p>
+  <table>
+    <tbody>
+      <tr><td>Recomputed payload matches stored</td>
+          <td>{% if report.payload_matches %}<span class="check-circle">OK</span>{% else %}MISMATCH{% endif %}</td></tr>
+      <tr><td>Snapshot hash matches</td>
+          <td>{% if report.hash_matches %}<span class="check-circle">OK</span>{% else %}MISMATCH{% endif %}</td></tr>
+      <tr><td>Signature valid</td>
+          <td>{% if report.signature_valid %}<span class="check-circle">OK</span>{% else %}INVALID{% endif %}</td></tr>
+      <tr><td>Reconciliation (accepted = counted + invalid)</td>
+          <td>{% if report.stats.reconciliation_ok %}<span class="check-circle">OK</span>{% else %}FAILED{% endif %}</td></tr>
+      <tr><td>Stored totals</td><td><code>{{ report.stored_totals }}</code></td></tr>
+      <tr><td>Recomputed totals</td><td><code>{{ report.recomputed_totals }}</code></td></tr>
+    </tbody>
+  </table>
+  <p><a class="btn btn-outline" href="{% url 'results' election.pk %}">&larr; Results</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Receipt verification · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>Verify a ballot receipt</h1>
+    <p class="hint">Receipt verification confirms that a ballot was accepted — it never
+      reveals who cast it or what it contains.</p>
+    <form method="get">
+      <div class="form-group">
+        <label for="id_code">Receipt code</label>
+        <input class="input" type="text" name="code" id="id_code" value="{{ code }}" autocomplete="off">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Verify</button>
+    </form>
+    {% if code %}
+      {% if found %}
+        <p class="check-circle">Accepted: this ballot is in the box
+          (sequence #{{ found.box_seq }}, accepted {{ found.accepted_at|date:"Y-m-d H:i" }}).</p>
+        <p class="hint">Ballot hash: <code>{{ found.ballot_hash }}</code></p>
+      {% else %}
+        <p class="messages error">No ballot with this receipt code exists in this
+          election. Check the code and try again.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Configure · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>{{ election.title }}</h1>
+  <p>
+    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
+    &middot; <a href="{% url 'election_voters' election.pk %}">Voter registry</a>
+    &middot; <a href="{% url 'monitor' election.pk %}">Live monitor</a>
+    &middot; <a href="{% url 'election_audit' election.pk %}">Audit trail</a>
+    &middot; <a href="{% url 'representatives_list' election.pk %}">Representatives</a>
+    &middot; <a href="{% url 'incident_list' election.pk %}">Incidents</a>
+    &middot; <a href="{% url 'results' election.pk %}">Results</a>
+  </p>
+
+  <section class="card inline-section">
+    <h2>1 · Election rules</h2>
+    <p class="hint">
+      Voting: {{ election.start_at|date:"Y-m-d H:i" }} &rarr; {{ election.end_at|date:"Y-m-d H:i" }} ·
+      Blank votes: {{ election.allow_blank|yesno:"allowed,not allowed" }} ·
+      Results: {{ election.get_results_visibility_display }}
+    </p>
+    {% if election.state == election.STATE_DRAFT %}
+      <a class="btn btn-sm btn-outline" href="{% url 'election_edit' election.pk %}">Edit rules</a>
+    {% else %}
+      <p class="hint">Rules are locked once the election leaves DRAFT.</p>
+    {% endif %}
+  </section>
+
+  <section class="card inline-section">
+    <h2>2 · Positions &amp; candidates</h2>
+    {% for pos in positions %}
+      <div class="position-section">
+        <div class="position-header">
+          <h3>{{ pos.title }} <span class="hint">(max {{ pos.max_choices }} choice{{ pos.max_choices|pluralize }})</span></h3>
+          {% if election.state == election.STATE_DRAFT %}
+            <form method="post" action="{% url 'position_delete' election.pk pos.pk %}">
+              {% csrf_token %}<button class="btn btn-sm btn-outline" type="submit">Remove</button>
+            </form>
+          {% endif %}
+        </div>
+        <table>
+          <thead><tr><th>Candidate</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for c in pos.candidates.all %}
+              <tr>
+                <td>{{ c.full_name }}</td>
+                <td>{{ c.get_status_display }}</td>
+                <td class="action-links">
+                  {% if election.state == election.STATE_DRAFT %}
+                    <form method="post" action="{% url 'candidate_delete' election.pk c.pk %}">
+                      {% csrf_token %}<button class="btn btn-sm btn-outline" type="submit">Remove</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="hint">No candidates yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if election.state == election.STATE_DRAFT %}
+          <form method="post" action="{% url 'candidate_add' election.pk pos.pk %}">
+            {% csrf_token %}
+            {{ candidate_form.as_div }}
+            <button class="btn btn-sm btn-primary" type="submit">Add candidate</button>
+          </form>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p class="hint">No positions defined yet — add at least one.</p>
+    {% endfor %}
+
+    {% if election.state == election.STATE_DRAFT %}
+      <h3>Add position</h3>
+      <form method="post" action="{% url 'position_add' election.pk %}">
+        {% csrf_token %}
+        {{ position_form.as_div }}
+        <button class="btn btn-sm btn-primary" type="submit">Add position</button>
+      </form>
+    {% endif %}
+    <p class="hint">Configuration hash (frozen at scheduling):
+      <code>{{ config_hash|default:"not frozen yet" }}</code></p>
+  </section>
+
+  <section class="card inline-section">
+    <h2>3 · Polling stations</h2>
+    <ul>
+      {% for s in stations %}<li>{{ s.name }} — {{ s.get_channel_display }} ({{ s.get_status_display }})</li>{% empty %}
+        <li class="hint">No polling stations defined.</li>{% endfor %}
+    </ul>
+    <form method="post" action="{% url 'station_add' election.pk %}">
+      {% csrf_token %}
+      {{ station_form.as_div }}
+      <button class="btn btn-sm btn-primary" type="submit">Add station</button>
+    </form>
+  </section>
+
+  <section class="card inline-section">
+    <h2>4 · Lifecycle</h2>
+    <p class="hint">Every transition below is enforced in the backend; the buttons only
+      invoke it. Four-eyes actions require a documented request plus an independent
+      approver.</p>
+    <div class="action-links">
+      {% for t in transitions %}
+        {% if t.dual %}
+          <span class="hint">{{ t.label }} &mdash; requires approval (see below)</span>
+        {% else %}
+          <form method="post" action="{% url 'election_action' election.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ t.target }}">
+            <button class="btn btn-sm btn-primary" type="submit">{{ t.label }}</button>
+          </form>
+        {% endif %}
+      {% empty %}
+        <p class="hint">No transitions are available from {{ election.get_state_display }}.</p>
+      {% endfor %}
+    </div>
+
+    <h3>Four-eyes approvals</h3>
+    {% for a in pending_approvals %}
+      <div class="inline-card">
+        <p><strong>{{ a.get_kind_display }}</strong> — requested by
+          {{ a.requested_by }}: {{ a.reason }}</p>
+        {% if can_approve %}
+          <form method="post" action="{% url 'approval_decide' a.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="decision" value="approve">
+            <input class="input" name="note" placeholder="Decision note">
+            <button class="btn btn-sm btn-success" type="submit">Approve &amp; apply</button>
+          </form>
+          <form method="post" action="{% url 'approval_decide' a.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="decision" value="reject">
+            <button class="btn btn-sm btn-outline" type="submit">Reject</button>
+          </form>
+        {% else %}
+          <p class="hint">Waiting for an independent administrator to decide.</p>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p class="hint">No pending approval requests.</p>
+    {% endfor %}
+
+    {% for t in transitions %}
+      {% if t.dual %}
+        <form method="post" action="{% url 'approval_request' election.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="kind" value="{{ t.dual }}">
+          <h4>Request: {{ t.label }}</h4>
+          {{ approval_form.as_div }}
+          <button class="btn btn-sm btn-primary" type="submit">Submit request</button>
+        </form>
+      {% endif %}
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

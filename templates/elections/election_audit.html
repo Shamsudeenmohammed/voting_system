@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Audit trail · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Audit trail — {{ election.title }}</h1>
+  <p>
+    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
+    &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a>
+    &middot; <a href="{% url 'audit_export' election.pk %}">Export chain (JSON)</a>
+    <form method="post" action="{% url 'audit_checkpoint' election.pk %}" class="inline">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-outline" type="submit">Sign checkpoint at head</button>
+    </form>
+  </p>
+
+  <section class="card inline-section">
+    <h2>Chain integrity</h2>
+    {% if chain.ok %}
+      <p class="check-circle">Hash chain verified: {{ chain.events }} events,
+        head sequence {{ chain.head_seq }}.</p>
+    {% else %}
+      <p class="messages error">Chain verification FAILED: {{ chain.error }}
+        (first bad sequence: {{ chain.first_bad_seq }}).</p>
+    {% endif %}
+  </section>
+
+  <table>
+    <thead><tr><th>Seq</th><th>When</th><th>Action</th><th>Actor</th><th>Reason / details</th></tr></thead>
+    <tbody>
+      {% for ev in page %}
+        <tr>
+          <td>{{ ev.seq }}</td>
+          <td>{{ ev.created_at|date:"Y-m-d H:i:s" }}</td>
+          <td>{{ ev.action }}</td>
+          <td>{{ ev.actor_label|default:"system" }}</td>
+          <td>{{ ev.reason }} {% if ev.details %}<code>{{ ev.details }}</code>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="hint">No events recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if page.has_other_pages %}
+    <p class="action-links">
+      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">&larr; newer</a>{% endif %}
+      Page {{ page.number }} of {{ page.paginator.num_pages }}
+      {% if page.has_next %}<a href="?page={{ page.next_page_number }}">older &rarr;</a>{% endif %}
+    </p>
+  {% endif %}
+</div>
+{% endblock %}

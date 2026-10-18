@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Live monitor · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Live monitor — {{ election.title }}</h1>
+  <p><span class="badge {{ election.state_badge }}" id="state-badge">{{ election.get_state_display }}</span>
+     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a></p>
+  <p class="hint">Aggregate data only (turnout, box counter, station and incident
+    status). Refreshes every 5 seconds; no ballot contents are ever loaded here.</p>
+
+  <section class="card inline-section">
+    <h2>Status</h2>
+    <p class="stat" id="turnout">…</p>
+    <p>Ballot box sequence: <strong id="box-seq">…</strong></p>
+    <p>Open incidents: <strong id="incidents">…</strong> ·
+       Approved representatives: <strong id="reps">…</strong> ·
+       Pending: <strong id="reps-pending">…</strong></p>
+  </section>
+
+  <section class="card inline-section">
+    <h2>Stations</h2>
+    <table>
+      <thead><tr><th>Station</th><th>Status</th><th>Ballots</th></tr></thead>
+      <tbody id="stations"><tr><td colspan="3">loading…</td></tr></tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const url = "{{ live_url }}";
+function refresh() {
+  fetch(url, {headers: {"Accept": "application/json"}})
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("state-badge").textContent = d.state.toUpperCase();
+      const t = d.turnout;
+      document.getElementById("turnout").textContent =
+        (t.total === null) ? "Turnout hidden while voting is open"
+          : `${t.voted} / ${t.total} voted (${t.percent}%)`;
+      document.getElementById("box-seq").textContent = d.ballot_box.last_seq;
+      document.getElementById("incidents").textContent = d.incidents_open;
+      document.getElementById("reps").textContent = d.representatives.approved;
+      document.getElementById("reps-pending").textContent = d.representatives.pending;
+      document.getElementById("stations").innerHTML = d.stations.length
+        ? d.stations.map(s => `<tr><td>${s.name}</td><td>${s.status}</td><td>${s.ballots}</td></tr>`).join("")
+        : '<tr><td colspan="3">No stations configured.</td></tr>';
+    })
+    .catch(() => {});
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+{% endblock %}

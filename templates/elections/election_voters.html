@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Voters · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Voter registry — {{ election.title }}</h1>
+  <p><span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
+     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Back to configuration</a></p>
+
+  <section class="card inline-section">
+    <h2>Registry ({{ voters|length }})</h2>
+    {% if not registration_open %}
+      <p class="hint">Registration is closed; the registry is frozen. Credentials can
+        still be revoked for voters who have not voted.</p>
+    {% endif %}
+    <table>
+      <thead><tr><th>Voter ID</th><th>Name</th><th>Unit</th><th>Voted</th><th></th></tr></thead>
+      <tbody>
+        {% for v in voters %}
+          <tr>
+            <td>{{ v.voter_id|default:"—" }}</td>
+            <td>{{ v.full_name }}</td>
+            <td>{{ v.organization_unit }}</td>
+            <td>{{ v.has_voted|yesno:"yes,no" }}</td>
+            <td class="action-links">
+              {% if not v.has_voted %}
+                <form method="post" action="{% url 'voter_revoke' election.pk v.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline" type="submit">Revoke credentials</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="hint">No voters registered yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {% if registration_open %}
+    <section class="card inline-section">
+      <h2>Add a voter</h2>
+      <form method="post" action="{% url 'voter_add' election.pk %}">
+        {% csrf_token %}
+        {{ voter_form.as_div }}
+        <button class="btn btn-sm btn-primary" type="submit">Register voter</button>
+      </form>
+    </section>
+
+    <section class="card inline-section">
+      <h2>Bulk upload (CSV)</h2>
+      <form method="post" action="{% url 'voter_bulk_add' election.pk %}">
+        {% csrf_token %}
+        {{ bulk_form.as_div }}
+        <button class="btn btn-sm btn-primary" type="submit">Upload voters</button>
+      </form>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

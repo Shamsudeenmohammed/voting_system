@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · VoteSys{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+    <a class="btn btn-outline" href="{% url 'home' %}">Back to elections</a>
+  </div>
+</div>
+{% endblock %}

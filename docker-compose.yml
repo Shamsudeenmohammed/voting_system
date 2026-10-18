@@ -1,0 +1,88 @@
+# Reference deployment: web + celery worker + PostgreSQL + Redis.
+# Usage:  cp .env.example .env  (fill in secrets)  &&  docker compose up -d --build
+#
+# Notes:
+# * The `worker` service is optional scaffolding - there are currently no
+#   background tasks; ballot acceptance and tallying run in-request.
+# * `secrets` and `credentials` volumes hold the ballot encryption key and
+#   the issued-credential CSVs; back them up with the database (docs/OPERATIONS.md).
+
+name: voting-system
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: voting
+      POSTGRES_USER: voting
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voting -d voting"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      # In-container overrides on top of .env
+      DB_ENGINE: postgresql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: voting
+      DB_USER: voting
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    ports:
+      - "8000:8000"
+    volumes:
+      - secrets:/app/secrets
+      - credentials:/app/private
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DB_ENGINE: postgresql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: voting
+      DB_USER: voting
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO"]
+    volumes:
+      - secrets:/app/secrets
+      - credentials:/app/private
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  secrets:
+  credentials:

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ org.name }} · Overview{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>{{ org.name }}</h1>
+  <p class="hint">Organization overview
+    {% for o in orgs %}{% if o.pk != org.pk %} · <a href="?org={{ o.pk }}">{{ o.name }}</a>{% endif %}{% endfor %}
+  </p>
+  <table>
+    <thead><tr><th>Election</th><th>State</th><th>Voters</th><th></th></tr></thead>
+    <tbody>
+      {% for e in elections %}
+        <tr>
+          <td>{{ e.title }}</td>
+          <td><span class="badge {{ e.state_badge }}">{{ e.get_state_display }}</span></td>
+          <td>{{ e.voter_count }}</td>
+          <td class="action-links">
+            <a href="{% url 'monitor' e.pk %}">Monitor</a>
+            <a href="{% url 'election_audit' e.pk %}">Audit</a>
+            <a href="{% url 'results' e.pk %}">Results</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="hint">No elections in this organization yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

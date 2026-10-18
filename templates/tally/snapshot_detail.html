@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Tally v{{ snapshot.version }} · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Tally snapshot v{{ snapshot.version }} — {{ election.title }}</h1>
+  <p>
+    {{ snapshot.get_status_display }} ·
+    computed {{ snapshot.computed_at|date:"Y-m-d H:i" }}
+    {% if snapshot.certified_by %} · certified by {{ snapshot.certified_by }}{% endif %}
+    {% if snapshot.reason %} · reason: {{ snapshot.reason }}{% endif %}
+  </p>
+  <p class="hint">
+    Snapshot hash <code>{{ snapshot.snapshot_hash }}</code><br>
+    Previous hash <code>{{ snapshot.prev_snapshot_hash }}</code><br>
+    Signature ({{ snapshot.signature_algorithm }}) <code>{{ snapshot.signature|slice:"40" }}…</code>
+  </p>
+  <p class="action-links">
+    <a href="{% url 'verify' election.pk snapshot.version %}">Verify count</a>
+    <a href="{% url 'export_snapshot' election.pk snapshot.version %}">Export JSON</a>
+    <a href="{% url 'results' election.pk %}">&larr; All results</a>
+  </p>
+  {% for pos in payload.positions %}
+    <section class="position-section card">
+      <div class="position-header"><h2>{{ pos.title }}</h2></div>
+      <table>
+        <thead><tr><th>Candidate</th><th>Votes</th></tr></thead>
+        <tbody>
+          {% for c in pos.candidates %}<tr><td>{{ c.full_name }}</td><td>{{ c.votes }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+      <p class="hint">{{ pos.totals }}</p>
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,28 +1,32 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-
-# Django
-*.sqlite3
-db.sqlite3
-staticfiles/
-media/
-
-# Environment
+# Environments / secrets
 .env
+*.env
 venv/
 .venv/
-env/
+__pycache__/
+*.py[cod]
+
+# Databases / local data
+*.sqlite3
+db.sqlite3
+/test_dbs/
+/media/
+/staticfiles/
+
+# Runtime data: issued voter credentials (CSV with live tokens) and
+# auto-generated cryptographic material — never commit these.
+/private/
+
+# Keys — never commit private cryptographic material
+*.pem
+*.key
+!deploy/**/*.example
+secrets/
+
+# Logs
+*.log
+logs/
 
 # IDE
-.vscode/
 .idea/
-*.swp
-*.swo
-
-# OS
-Thumbs.db
-.DS_Store
+.vscode/

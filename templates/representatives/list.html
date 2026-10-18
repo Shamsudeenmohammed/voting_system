@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Representatives · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Representatives — {{ election.title }}</h1>
+  <p><span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
+     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a>
+     &middot; <a href="{% url 'incident_list' election.pk %}">Incidents</a></p>
+  <table>
+    <thead><tr><th>Name</th><th>Candidate</th><th>Status</th><th>Visits</th><th></th></tr></thead>
+    <tbody>
+      {% for r in reps %}
+        <tr>
+          <td>{{ r.full_name }} <span class="hint">{{ r.email }}</span></td>
+          <td>{{ r.candidate.full_name }}</td>
+          <td>{{ r.get_status_display }}</td>
+          <td>{{ r.attendance_count }}</td>
+          <td class="action-links">
+            {% if r.status == r.STATUS_PENDING %}
+              <form method="post" action="{% url 'decide' r.pk %}" class="inline">
+                {% csrf_token %}<input type="hidden" name="decision" value="approve">
+                <button class="btn btn-sm btn-success" type="submit">Approve</button>
+              </form>
+            {% endif %}
+            {% if r.status == r.STATUS_APPROVED %}
+              <form method="post" action="{% url 'accredit' r.pk %}" class="inline">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-primary" type="submit">Accredit visit</button>
+              </form>
+            {% endif %}
+            {% if r.status != r.STATUS_REVOKED %}
+              <form method="post" action="{% url 'decide' r.pk %}" class="inline">
+                {% csrf_token %}<input type="hidden" name="decision" value="revoke">
+                <button class="btn btn-sm btn-outline" type="submit">Revoke</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="hint">No representatives applied yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Recent incidents</h2>
+  <ul>
+    {% for i in incidents %}<li>[{{ i.get_severity_display }}] {{ i.title }} — {{ i.get_status_display }}</li>{% empty %}
+      <li class="hint">No incidents reported.</li>{% endfor %}
+  </ul>
+</div>
+{% endblock %}

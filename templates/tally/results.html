@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Results · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Results — {{ election.title }}</h1>
+  <p>
+    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
+    {% if snapshot %}
+      &middot; tally v{{ snapshot.version }} ({{ snapshot.get_status_display }})
+    {% endif %}
+    &middot; <a href="{% url 'election_detail' election.pk %}">&larr; Election</a>
+  </p>
+
+  {% if not visible or not snapshot %}
+    <p class="hint">Results are not public yet. They appear here once they have been
+      {% if election.results_visibility == election.VISIBILITY_AFTER_CERT %}
+        certified
+      {% else %}
+        published
+      {% endif %} by the election authority.</p>
+  {% else %}
+    {% if not snapshot.reconciliation_ok %}
+      <p class="messages error">Warning: ballot reconciliation did not pass for this
+        snapshot (accepted {{ snapshot.ballots_accepted }}, counted {{ snapshot.ballots_counted }},
+        invalid {{ snapshot.ballots_invalid }}). Do not rely on these numbers until they
+        are certified.</p>
+    {% endif %}
+    <p class="hint">
+      Ballots accepted: {{ snapshot.ballots_accepted }} ·
+      Counted: {{ snapshot.ballots_counted }} ·
+      Invalid/spoiled: {{ snapshot.ballots_invalid }} ·
+      Config hash <code>{{ snapshot.config_hash|slice:":16" }}…</code>
+    </p>
+
+    {% for pos in snapshot.payload.positions %}
+      <section class="position-section card">
+        <div class="position-header"><h2>{{ pos.title }}</h2></div>
+        <table>
+          <thead><tr><th>Candidate</th><th>Votes</th></tr></thead>
+          <tbody>
+            {% for c in pos.candidates %}
+              <tr><td>{{ c.full_name }}</td><td><strong>{{ c.votes }}</strong></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="hint">Undervotes (blank): {{ pos.totals.undervotes }} ·
+           Overvotes: {{ pos.totals.overvotes }}</p>
+      </section>
+    {% endfor %}
+
+    <p class="action-links">
+      <a class="btn btn-outline" href="{% url 'verify' election.pk snapshot.version %}">Verify count</a>
+      <a class="btn btn-outline" href="{% url 'export_snapshot' election.pk snapshot.version %}">Download signed JSON</a>
+    </p>
+  {% endif %}
+
+  {% if privileged and versions %}
+    <section class="card inline-section">
+      <h2>Snapshot history (officials)</h2>
+      <table>
+        <thead><tr><th>Version</th><th>Status</th><th>Computed</th><th>Ballots</th><th></th></tr></thead>
+        <tbody>
+          {% for s in versions %}
+            <tr>
+              <td>v{{ s.version }}</td>
+              <td>{{ s.get_status_display }}</td>
+              <td>{{ s.computed_at|date:"Y-m-d H:i" }}</td>
+              <td>{{ s.ballots_accepted }}</td>
+              <td class="action-links">
+                <a href="{% url 'snapshot_detail' election.pk s.version %}">Detail</a>
+                <a href="{% url 'verify' election.pk s.version %}">Verify</a>
+                <a href="{% url 'export_snapshot' election.pk s.version %}">Export</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <form method="post" action="{% url 'recount' election.pk %}" class="inline">
+        {% csrf_token %}
+        <input class="input" name="reason" placeholder="Reason for recount (audited)">
+        <button class="btn btn-sm btn-primary" type="submit">Run recount</button>
+      </form>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

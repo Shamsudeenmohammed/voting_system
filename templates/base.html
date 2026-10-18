@@ -1,0 +1,38 @@
+<!doctype html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}VoteSys{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <div class="logo"><a href="{% url 'home' %}">VoteSys</a></div>
+      <nav>
+        <a href="{% url 'home' %}">Elections</a>
+        {% if user.is_authenticated %}
+          {% if user.is_staff %}<a href="{% url 'dashboard' %}">Dashboard</a>{% endif %}
+          <a href="{% url 'representative_dashboard' %}">Representatives</a>
+          <a href="{% url 'logout' %}?next={% url 'home' %}">Logout ({{ user.username }})</a>
+        {% else %}
+          <a href="{% url 'login' %}">Staff login</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+  <main>
+    {% if messages %}
+      <ul class="messages">
+        {% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer><p>VoteSys &mdash; Secret-ballot voting platform</p></footer>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

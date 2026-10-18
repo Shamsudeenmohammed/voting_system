@@ -1,32 +1,35 @@
-{% extends "elections/base.html" %}
-{% block title %}Welcome{% endblock %}
+{% extends "base.html" %}
+{% block title %}Elections · VoteSys{% endblock %}
 {% block content %}
-<div style="text-align:center;padding:60px 20px;max-width:600px;margin:0 auto;">
-  <h1 style="font-size:2rem;margin-bottom:8px;">VoteSys</h1>
-  <p style="color:var(--gray-500);font-size:1.0625rem;margin-bottom:40px;">
-    Secure Universal Voting Platform
-  </p>
-  <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
-    <a href="{% url 'elections:voter_login' %}" class="btn btn-primary" style="padding:14px 40px;font-size:1rem;">
-      Voter Login
-    </a>
-    <a href="{% url 'elections:admin_login' %}" class="btn btn-outline" style="padding:14px 40px;font-size:1rem;">
-      Admin Login
-    </a>
-  </div>
-  <div style="margin-top:48px;display:flex;gap:24px;justify-content:center;flex-wrap:wrap;">
-    <div class="card" style="max-width:180px;padding:20px;">
-      <div style="font-size:2rem;font-weight:700;color:var(--primary);">1</div>
-      <div style="font-size:.8125rem;color:var(--gray-500);">Admin creates election &amp; uploads voters</div>
+<div class="admin-content">
+  <h1>Current elections</h1>
+  <p class="hint">Open an election to vote, follow its progress or (after
+    publication) verify the certified results.</p>
+
+  {% if elections %}
+    <div class="grid">
+      {% for e in elections %}
+        <div class="election-card card">
+          <h2><a href="{% url 'election_detail' e.pk %}">{{ e.title }}</a></h2>
+          <p><span class="badge {{ e.state_badge }}">{{ e.get_state_display }}</span>
+             &middot; {{ e.get_category_display }}</p>
+          <p class="hint">{{ e.start_at|date:"Y-m-d H:i" }} &rarr; {{ e.end_at|date:"Y-m-d H:i" }}</p>
+          {% if e.state == e.STATE_OPEN %}
+            <a class="btn btn-primary" href="{% url 'voter_access' e.pk %}">Vote now</a>
+          {% endif %}
+          {% if e.state == e.STATE_PUBLISHED %}
+            <a class="btn btn-success" href="{% url 'results' e.pk %}">Results</a>
+          {% endif %}
+          <a class="btn btn-outline" href="{% url 'receipt_lookup' e.pk %}">Verify receipt</a>
+        </div>
+      {% endfor %}
     </div>
-    <div class="card" style="max-width:180px;padding:20px;">
-      <div style="font-size:2rem;font-weight:700;color:var(--primary);">2</div>
-      <div style="font-size:.8125rem;color:var(--gray-500);">Voter logs in with ID + token</div>
-    </div>
-    <div class="card" style="max-width:180px;padding:20px;">
-      <div style="font-size:2rem;font-weight:700;color:var(--primary);">3</div>
-      <div style="font-size:.8125rem;color:var(--gray-500);">Cast vote securely &amp; view results</div>
-    </div>
-  </div>
+  {% else %}
+    <p>No elections are currently open, scheduled or published.</p>
+  {% endif %}
+
+  {% if user.is_authenticated and user.is_staff %}
+    <p><a class="btn btn-outline" href="{% url 'dashboard' %}">Manage elections</a></p>
+  {% endif %}
 </div>
 {% endblock %}

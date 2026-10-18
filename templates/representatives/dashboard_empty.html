@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Representative dashboard{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>No active assignment</h1>
+    <p class="hint">You are not an approved representative for any election.
+      Apply through your candidate's election page, or wait for your application
+      to be approved.</p>
+    <a class="btn btn-outline" href="{% url 'home' %}">Back to elections</a>
+  </div>
+</div>
+{% endblock %}

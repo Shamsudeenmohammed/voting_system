@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Incidents · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Incidents — {{ election.title }}</h1>
+  <p><a href="{% url 'incident_create' election.pk %}">Report an incident</a>
+     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a></p>
+  <table>
+    <thead><tr><th>When</th><th>Severity</th><th>Title</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for i in incidents %}
+        <tr>
+          <td>{{ i.created_at|date:"Y-m-d H:i" }}</td>
+          <td>{{ i.get_severity_display }}</td>
+          <td>{{ i.title }}<br><span class="hint">{{ i.description|truncatechars:140 }}</span></td>
+          <td>{{ i.get_status_display }}
+            {% if i.resolution_note %}<br><span class="hint">{{ i.resolution_note }}</span>{% endif %}</td>
+          <td class="action-links">
+            {% if staff and i.status != i.STATUS_RESOLVED and i.status != i.STATUS_REJECTED %}
+              <form method="post" action="{% url 'incident_resolve' i.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="acknowledged">
+                <button class="btn btn-sm btn-outline" type="submit">Ack</button>
+              </form>
+              <form method="post" action="{% url 'incident_resolve' i.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="resolved">
+                <input class="input" name="note" placeholder="Resolution note">
+                <button class="btn btn-sm btn-success" type="submit">Resolve</button>
+              </form>
+              <form method="post" action="{% url 'incident_resolve' i.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="rejected">
+                <button class="btn btn-sm btn-outline" type="submit">Reject</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="hint">No incidents reported.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

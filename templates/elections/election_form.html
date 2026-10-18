@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · VoteSys{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>{{ title }}</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_div }}
+    {% if orgs %}
+      <div class="form-group">
+        <label for="id_organization">Organization (superuser only)</label>
+        <select class="input" name="organization" id="id_organization">
+          {% for o in orgs %}<option value="{{ o.pk }}">{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-outline" href="{% url 'dashboard' %}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

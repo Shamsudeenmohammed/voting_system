@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Vote · {{ election.title }}{% endblock %}
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <h1>{{ election.title }}</h1>
+    {% if issued and token %}
+      <h2>Your voting credential</h2>
+      <p class="hint">This credential grants <strong>one</strong> ballot and is shown
+        exactly once. Store it securely, then open your ballot:</p>
+      <div class="token-display">{{ token }}</div>
+      <p><a class="btn btn-primary btn-block" href="{{ ballot_url }}">Open my ballot</a></p>
+      <p class="hint">Anyone holding this credential can vote in your place until it is
+        used — do not share it. Your selections can never be linked back to you.</p>
+    {% else %}
+      <p class="hint">Enter the voter ID you were registered with. You will receive a
+        single-use voting credential for this election.</p>
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+          <label for="id_voter_id">Voter ID</label>
+          <input class="input" type="text" name="voter_id" id="id_voter_id"
+                 autocomplete="off" autofocus required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Request voting credential</button>
+      </form>
+    {% endif %}
+    <p class="hint"><a href="{% url 'election_detail' election.pk %}">&larr; Back to election</a></p>
+  </div>
+</div>
+{% endblock %}
