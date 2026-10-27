@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+{% block title %}Needs attention · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Operations: needs attention ---- */
+  .attn-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+  .attn-list { display: flex; flex-direction: column; gap: 1rem; }
+  .attn-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--border-color-strong);
+    border-radius: var(--radius-lg);
+    padding: 1.2rem 1.35rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    transition: box-shadow var(--transition), border-color var(--transition), transform var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+  }
+  .attn-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary) 0%, #818cf8 55%, transparent 100%);
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .attn-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+  .attn-card:hover::before { opacity: 1; }
+  .attn-card.blocking { border-left-color: var(--danger); }
+  .attn-card.blocking::before { background: linear-gradient(90deg, var(--danger) 0%, #f87171 55%, transparent 100%); }
+  .attn-card.pending { border-left-color: var(--warning); }
+  .attn-card.pending::before { background: linear-gradient(90deg, var(--warning) 0%, #fbbf24 55%, transparent 100%); }
+  .attn-card.ready { border-left-color: var(--success); }
+  .attn-card.ready::before { background: linear-gradient(90deg, var(--success) 0%, #34d399 55%, transparent 100%); }
+  .attn-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .attn-head h3 { font-size: 1.05rem; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .attn-head h3 a { color: inherit; text-decoration: none; transition: color var(--transition-fast); }
+  .attn-head h3 a:hover { color: var(--primary); }
+  .attn-org { font-size: 0.8rem; color: var(--text-tertiary); display: flex; align-items: center; gap: 0.35rem; }
+  .check-line { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.85rem; line-height: 1.5; }
+  .check-line i { margin-top: 0.15rem; flex-shrink: 0; }
+  .check-line.err { color: #b91c1c; }
+  .check-line.err i { color: var(--danger); }
+  .check-line.warn { color: #92400e; }
+  .check-line.warn i { color: var(--warning); }
+  .check-line.info { color: var(--text-secondary); }
+  .check-line.info i { color: var(--info); }
+  .next-step {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--primary-light);
+    border: 1px solid #c7d2fe;
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.85rem;
+    font-size: 0.85rem;
+    color: var(--primary-dark);
+    font-weight: 550;
+    animation: slide-in 0.3s ease-out;
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .next-step i { color: var(--primary); }
+  .attn-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.25rem; }
+  
+  /* Quick action buttons */
+  .quick-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .quick-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+  }
+  .quick-action-btn:hover {
+    background: var(--primary-light);
+    border-color: #c7d2fe;
+    color: var(--primary-dark);
+    transform: translateY(-1px);
+  }
+  .quick-action-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+  .quick-action-btn.primary {
+    background: linear-gradient(180deg, var(--primary-hover) 0%, var(--primary-dark) 100%);
+    color: var(--text-inverse);
+    border-color: transparent;
+  }
+  .quick-action-btn.primary:hover {
+    background: linear-gradient(180deg, #6d70f5 0%, var(--primary) 100%);
+    color: var(--text-inverse);
+  }
+  .quick-action-btn.success {
+    background: linear-gradient(180deg, #10b981 0%, var(--success) 100%);
+    color: var(--text-inverse);
+    border-color: transparent;
+  }
+  .quick-action-btn.success:hover {
+    background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  }
+  .quick-action-btn.warning {
+    background: linear-gradient(180deg, #fbbf24 0%, var(--warning) 100%);
+    color: #78350f;
+    border-color: transparent;
+  }
+  .quick-action-btn.warning:hover {
+    background: linear-gradient(180deg, #fcd34d 0%, #d97706 100%);
+  }
+  .quick-action-btn.danger {
+    background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+    color: var(--text-inverse);
+    border-color: transparent;
+  }
+  .quick-action-btn.danger:hover {
+    background: linear-gradient(180deg, #f87171 0%, #ef4444 100%);
+  }
+  
+  /* Progress indicator */
+  .progress-ring {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+  .progress-ring circle {
+    fill: none;
+    stroke-width: 3;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+  }
+  .progress-ring .bg { stroke: var(--border-color); }
+  .progress-ring .fg {
+    stroke: var(--primary);
+    stroke-linecap: round;
+    stroke-dasharray: 157;
+    stroke-dashoffset: 157;
+    transition: stroke-dashoffset 0.6s cubic-bezier(.4, 0, .2, 1);
+  }
+  
+  /* Severity badges */
+  .severity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .severity-badge.blocking { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+  .severity-badge.pending { background: var(--warning-bg); color: var(--warning); border: 1px solid #fde68a; }
+  .severity-badge.warning { background: var(--warning-bg); color: var(--warning); border: 1px solid #fde68a; }
+  .severity-badge.ok { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; }
+  
+  /* Stats cards enhancement */
+  .stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.35rem;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition), border-color var(--transition), transform var(--transition);
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary) 0%, #818cf8 100%);
+  }
+  .stat:hover { box-shadow: var(--shadow-md); border-color: rgb(129 140 248 / 40%); transform: translateY(-2px); }
+  .stat .num {
+    display: block;
+    font-size: 1.9rem;
+    font-weight: 750;
+    color: var(--primary-dark);
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-tertiary); margin-top: 0.35rem; font-weight: 550; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .label i { font-size: 0.9rem; color: var(--primary); }
+  
+  /* Empty state enhancement */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    color: var(--text-secondary);
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-soft) 100%);
+  }
+  .empty-state .empty-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    background: linear-gradient(135deg, var(--success-bg) 0%, var(--success-light) 100%);
+    color: var(--success);
+    box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(5, 150, 105, 0.1);
+    animation: pulse-ring 2s ease-in-out infinite;
+  }
+  @keyframes pulse-ring {
+    0%, 100% { box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(5, 150, 105, 0.1), 0 0 0 0 rgba(5, 150, 105, 0.2); }
+    50% { box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(5, 150, 105, 0.1), 0 0 0 12px rgba(5, 150, 105, 0); }
+  }
+  .empty-state h2 { font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin: 0; letter-spacing: -0.02em; }
+  .empty-state p { max-width: 40ch; margin: 0; line-height: 1.6; }
+  
+  /* Loading skeleton */
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-primary) 50%, var(--bg-secondary) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: var(--radius-sm);
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .attn-card { padding: 1rem 1.1rem; }
+    .attn-head { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+    .attn-actions { width: 100%; justify-content: flex-start; }
+    .quick-actions { width: 100%; }
+    .quick-action-btn { flex: 1; justify-content: center; min-width: 0; }
+    .stat { padding: 1rem; }
+    .stat .num { font-size: 1.6rem; }
+  }
+  
+  @media (max-width: 480px) {
+    .attn-stats { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+    .quick-action-btn span { display: none; }
+    .quick-action-btn { padding: 0.5rem; }
+  }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>Needs attention</h1>
+    <p class="sub">
+      Elections with setup gaps or a decision waiting. Work through the list top
+      to bottom; open an election to take the next step. Nothing here changes an
+      election on its own.
+    </p>
+  </div>
+
+  <div class="attn-stats" role="region" aria-label="Attention statistics">
+    <div class="stat">
+      <span class="num">{{ election_total }}</span>
+      <span class="label"><i class="bi bi-diagram-3"></i> Elections in scope</span>
+    </div>
+    <div class="stat">
+      <span class="num">{{ attention_total }}</span>
+      <span class="label"><i class="bi bi-clipboard-check"></i> Need attention</span>
+    </div>
+    <div class="stat">
+      <span class="num">{{ blocking_total }}</span>
+      <span class="label"><i class="bi bi-exclamation-octagon"></i> Blocking</span>
+    </div>
+  </div>
+
+  {% if items %}
+    <div class="attn-list" role="list" aria-label="Elections needing attention">
+      {% for row in items %}
+        <section class="attn-card{% if row.blocking %} blocking{% elif row.decidable or row.pending_count %} pending{% else %} ready{% endif %}" role="listitem">
+          <div class="attn-head">
+            <div style="flex: 1; min-width: 0;">
+              <h3><a href="{% url 'election_config' row.election.pk %}">{{ row.election.title }}</a></h3>
+              <span class="attn-org"><i class="bi bi-building"></i> {{ row.election.organization.name }}</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+              <span class="badge {% if row.election.state_badge %}{{ row.election.state_badge }}{% else %}badge-closed{% endif %}">{{ row.election.get_state_display }}</span>
+              {% if row.blocking %}
+                <span class="severity-badge blocking"><i class="bi bi-x-octagon"></i> Blocking</span>
+              {% elif row.decidable %}
+                <span class="severity-badge pending"><i class="bi bi-shield-check"></i> Action needed</span>
+              {% elif row.pending_count %}
+                <span class="severity-badge warning"><i class="bi bi-hourglass-split"></i> Pending</span>
+              {% else %}
+                <span class="severity-badge ok"><i class="bi bi-check-circle"></i> Warnings only</span>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if row.blocking %}
+            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+              {% for c in row.blocking %}
+                <div class="check-line err"><i class="bi bi-x-circle-fill"></i><span><strong>{{ c.label }}:</strong> {{ c.detail }}</span></div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          
+          {% for c in row.warnings %}
+            <div class="check-line warn"><i class="bi bi-exclamation-triangle-fill"></i><span><strong>{{ c.label }}:</strong> {{ c.detail }}</span></div>
+          {% endfor %}
+
+          {% if row.report.next_action %}
+            <div class="next-step">
+              <i class="bi bi-arrow-right-circle"></i>
+              <span>Next: <strong>{{ row.report.next_action.label }}</strong> — {{ row.report.next_action.who }}</span>
+            </div>
+          {% endif %}
+
+          {% if row.decidable %}
+            <div class="check-line warn"><i class="bi bi-shield-check"></i><span>{{ row.decidable|length }} approval request(s) are waiting on your decision.</span></div>
+          {% elif row.pending_count %}
+            <div class="check-line info"><i class="bi bi-hourglass-split"></i><span>{{ row.pending_count }} approval request(s) pending with another administrator.</span></div>
+          {% endif %}
+
+          <div class="attn-actions">
+            <a class="btn btn-sm btn-primary" href="{% url 'election_config' row.election.pk %}"><i class="bi bi-sliders"></i> Open workspace</a>
+            
+            <!-- Quick actions based on state and blocking issues -->
+            <div class="quick-actions">
+              {% if row.election.state == "draft" %}
+                {% if row.blocking %}
+                  {% for c in row.blocking %}
+                    {% if "position" in c.key|lower or "Add at least one position" in c.detail %}
+                      <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#positions" title="Add positions">
+                        <i class="bi bi-plus-square"></i><span>Add position</span>
+                      </a>
+                    {% elif "candidate" in c.key|lower or "approved candidate" in c.detail %}
+                      <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#candidates" title="Add candidates">
+                        <i class="bi bi-person-plus"></i><span>Add candidates</span>
+                      </a>
+                    {% elif "schedule" in c.key|lower or "closing time" in c.detail %}
+                      <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#schedule" title="Fix schedule">
+                        <i class="bi bi-calendar-event"></i><span>Fix schedule</span>
+                      </a>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#positions" title="Add positions">
+                    <i class="bi bi-plus-square"></i><span>Add position</span>
+                  </a>
+                  <a class="quick-action-btn" href="{% url 'election_config' row.election.pk %}#actions" title="Submit for review">
+                    <i class="bi bi-send"></i><span>Submit for review</span>
+                  </a>
+                {% endif %}
+                
+              {% elif row.election.state == "registration" %}
+                {% if row.blocking %}
+                  {% for c in row.blocking %}
+                    {% if "candidate" in c.key|lower %}
+                      <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#candidates" title="Add candidates">
+                        <i class="bi bi-person-plus"></i><span>Add candidates</span>
+                      </a>
+                    {% elif "photo" in c.key|lower %}
+                      <a class="quick-action-btn warning" href="{% url 'election_config' row.election.pk %}#candidates" title="Add candidate photos">
+                        <i class="bi bi-image"></i><span>Add photos</span>
+                      </a>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+                <a class="quick-action-btn success" href="{% url 'election_config' row.election.pk %}#actions" title="Request configuration review">
+                  <i class="bi bi-clipboard-check"></i><span>Request review</span>
+                </a>
+                
+              {% elif row.election.state == "config_review" %}
+                <a class="quick-action-btn success" href="{% url 'approvals_inbox' %}" title="Approve configuration">
+                  <i class="bi bi-shield-check"></i><span>Approve config</span>
+                </a>
+                
+              {% elif row.election.state == "approved" %}
+                <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#schedule" title="Schedule election">
+                  <i class="bi bi-calendar-plus"></i><span>Schedule</span>
+                </a>
+                
+              {% elif row.election.state == "scheduled" %}
+                <a class="quick-action-btn success" href="{% url 'election_config' row.election.pk %}#actions" title="Open voting">
+                  <i class="bi bi-unlock"></i><span>Open voting</span>
+                </a>
+                
+              {% elif row.election.state == "open" %}
+                <a class="quick-action-btn warning" href="{% url 'election_config' row.election.pk %}#actions" title="Close voting">
+                  <i class="bi bi-lock"></i><span>Close voting</span>
+                </a>
+                
+              {% elif row.election.state == "closed" %}
+                <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#actions" title="Start reconciliation">
+                  <i class="bi bi-arrow-repeat"></i><span>Reconcile</span>
+                </a>
+                
+              {% elif row.election.state == "reconciliation" %}
+                <a class="quick-action-btn primary" href="{% url 'election_config' row.election.pk %}#actions" title="Submit for review">
+                  <i class="bi bi-clipboard-check"></i><span>Submit review</span>
+                </a>
+                
+              {% elif row.election.state == "review" %}
+                <a class="quick-action-btn success" href="{% url 'election_config' row.election.pk %}#actions" title="Certify results">
+                  <i class="bi bi-award"></i><span>Certify</span>
+                </a>
+                
+              {% elif row.election.state == "certified" %}
+                <a class="quick-action-btn success" href="{% url 'election_config' row.election.pk %}#actions" title="Publish results">
+                  <i class="bi bi-globe"></i><span>Publish</span>
+                </a>
+                
+              {% elif row.election.state == "published" %}
+                <a class="quick-action-btn" href="{% url 'election_config' row.election.pk %}#actions" title="Archive election">
+                  <i class="bi bi-archive"></i><span>Archive</span>
+                </a>
+              {% endif %}
+            </div>
+            
+            {% if row.decidable %}
+              <a class="btn btn-sm btn-outline" href="{% url 'approvals_inbox' %}"><i class="bi bi-shield-check"></i> Review approvals</a>
+            {% endif %}
+            <a class="btn btn-sm btn-outline" href="{% url 'election_audit' row.election.pk %}"><i class="bi bi-file-earmark-text"></i> Audit trail</a>
+          </div>
+        </section>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <span class="empty-icon"><i class="bi bi-check2-circle"></i></span>
+      <h2>Nothing needs attention</h2>
+      <p class="hint">Every election in your scope is either set up correctly or already running smoothly.</p>
+      <a class="btn btn-primary" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Back to dashboard</a>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  'use strict';
+  
+  // Animate stat numbers on load
+  document.querySelectorAll('.stat .num').forEach(function (el) {
+    var target = parseInt(el.textContent, 10) || 0;
+    var start = 0;
+    var t0 = performance.now();
+    (function tick(now) {
+      var p = Math.min((now - t0) / 600, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(start + (target - start) * eased);
+      if (p < 1) requestAnimationFrame(tick);
+    })(t0);
+  });
+  
+  // Stagger card entrance animation
+  document.querySelectorAll('.attn-card').forEach(function (card, idx) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(16px)';
+    card.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+    setTimeout(function () {
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 80 * idx);
+  });
+  
+  // Keyboard navigation for quick actions
+  document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    // '/' to focus search (if we add one later)
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      var firstAction = document.querySelector('.quick-action-btn, .btn-primary');
+      if (firstAction) firstAction.focus();
+    }
+  });
+  
+  // Add hover ripple effect to quick action buttons
+  document.querySelectorAll('.quick-action-btn').forEach(function (btn) {
+    btn.addEventListener('mouseenter', function () {
+      this.style.transform = 'translateY(-1px) scale(1.02)';
+    });
+    btn.addEventListener('mouseleave', function () {
+      this.style.transform = '';
+    });
+  });
+  
+  // Smooth scroll for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
+    anchor.addEventListener('click', function (e) {
+      var targetId = this.getAttribute('href').slice(1);
+      var target = document.getElementById(targetId);
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.focus({ preventScroll: true });
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,34 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Tally v{{ snapshot.version }} · {{ election.title }}{% endblock %}
 {% block content %}
+<style>
+  /* ---- Tally snapshot detail ---- */
+  .snap-head { display: flex; flex-direction: column; gap: 0.5rem; }
+  .snap-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+  .snap-hashes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.15rem;
+  }
+  .snap-hashes .hash-row { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; font-size: 0.8rem; }
+  .snap-hashes .hash-label { font-weight: 650; color: var(--text-tertiary); min-width: 110px; flex-shrink: 0; }
+  .snap-hashes code {
+    font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace;
+    font-size: 0.75rem;
+    word-break: break-all;
+    background: var(--bg-secondary);
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-xs);
+  }
+  .totals-plain { font-size: 0.78rem; color: var(--text-tertiary); word-break: break-all; }
+</style>
+
 <div class="admin-content">
-  <h1>Tally snapshot v{{ snapshot.version }} — {{ election.title }}</h1>
-  <p>
-    {{ snapshot.get_status_display }} ·
-    computed {{ snapshot.computed_at|date:"Y-m-d H:i" }}
-    {% if snapshot.certified_by %} · certified by {{ snapshot.certified_by }}{% endif %}
-    {% if snapshot.reason %} · reason: {{ snapshot.reason }}{% endif %}
-  </p>
-  <p class="hint">
-    Snapshot hash <code>{{ snapshot.snapshot_hash }}</code><br>
-    Previous hash <code>{{ snapshot.prev_snapshot_hash }}</code><br>
-    Signature ({{ snapshot.signature_algorithm }}) <code>{{ snapshot.signature|slice:"40" }}…</code>
-  </p>
-  <p class="action-links">
-    <a href="{% url 'verify' election.pk snapshot.version %}">Verify count</a>
-    <a href="{% url 'export_snapshot' election.pk snapshot.version %}">Export JSON</a>
-    <a href="{% url 'results' election.pk %}">&larr; All results</a>
-  </p>
+  <div class="snap-head page-head">
+    <h1>Tally snapshot v{{ snapshot.version }} — {{ election.title }}</h1>
+    <div class="snap-meta">
+      <span class="badge badge-category">{{ snapshot.get_status_display }}</span>
+      <span>computed {{ snapshot.computed_at|date:"Y-m-d H:i" }}</span>
+      {% if snapshot.certified_by %}<span>· certified by {{ snapshot.certified_by }}</span>{% endif %}
+      {% if snapshot.reason %}<span>· reason: {{ snapshot.reason }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="snap-hashes">
+    <div class="hash-row"><span class="hash-label">Snapshot hash</span><code>{{ snapshot.snapshot_hash }}</code></div>
+    <div class="hash-row"><span class="hash-label">Previous hash</span><code>{{ snapshot.prev_snapshot_hash }}</code></div>
+    <div class="hash-row"><span class="hash-label">Signature ({{ snapshot.signature_algorithm }})</span><code>{{ snapshot.signature|slice:"40" }}…</code></div>
+  </div>
+
+  <div class="action-links">
+    <a class="btn btn-sm btn-outline" href="{% url 'verify' election.pk snapshot.version %}"><i class="bi bi-check-circle"></i> Verify count</a>
+    <a class="btn btn-sm btn-outline" href="{% url 'export_snapshot' election.pk snapshot.version %}"><i class="bi bi-download"></i> Export JSON</a>
+    <a class="btn btn-sm btn-outline" href="{% url 'results' election.pk %}"><i class="bi bi-arrow-left"></i> All results</a>
+  </div>
+
   {% for pos in payload.positions %}
     <section class="position-section card">
       <div class="position-header"><h2>{{ pos.title }}</h2></div>
-      <table>
-        <thead><tr><th>Candidate</th><th>Votes</th></tr></thead>
-        <tbody>
-          {% for c in pos.candidates %}<tr><td>{{ c.full_name }}</td><td>{{ c.votes }}</td></tr>{% endfor %}
-        </tbody>
-      </table>
-      <p class="hint">{{ pos.totals }}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Candidate</th><th style="text-align: right;">Votes</th></tr></thead>
+          <tbody>
+            {% for c in pos.candidates %}<tr><td>{{ c.full_name }}</td><td style="text-align: right; font-weight: 650;">{{ c.votes }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="totals-plain">{{ pos.totals }}</p>
     </section>
   {% endfor %}
 </div>

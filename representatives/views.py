@@ -22,6 +22,8 @@ from audit import services as audit
 from elections.models import Candidate, Election, PollingStation, Voter
 from organizations.roles import (
     can_manage_election,
+    can_view_live_totals,
+    can_view_results_early,
     is_election_staff,
     is_system_admin,
 )
@@ -212,6 +214,7 @@ def dashboard(request):
     )
     attendance = rep.attendance.all()[:10]
     my_incidents = IncidentReport.objects.filter(election=election, reporter=rep)
+    open_incidents = my_incidents.exclude(status__in=("resolved", "rejected")).count()
     ctx = {
         "rep": rep,
         "election": election,
@@ -226,7 +229,15 @@ def dashboard(request):
             # Only aggregate volumes per station — never ballot contents.
         ],
         "attendance": attendance,
-        "my_incidents": my_incidents,
+        "my_incidents": my_incidents.select_related("station")[:10],
+        "open_incidents": open_incidents,
+        # Does the live monitor show turnout to this representative *now*?
+        # Live turnout is withheld from non-privileged users while voting is
+        # open, then shown once the election closes (mirrors live_status).
+        "live_turnout_visible": can_view_results_early(request.user, election)
+        or election.state != Election.STATE_OPEN,
+        # Candidate totals follow the election's results-visibility policy.
+        "live_board_visible": can_view_live_totals(request.user, election),
     }
     return render(request, "representatives/dashboard.html", ctx)
 

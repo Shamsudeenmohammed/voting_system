@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Election oversight · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Election commission chair oversight ---- */
+  .oversight-list { display: flex; flex-direction: column; gap: 1rem; }
+  .oversight-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--border-color-strong);
+    border-radius: var(--radius-lg);
+    padding: 1.2rem 1.35rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    transition: box-shadow var(--transition), border-color var(--transition);
+  }
+  .oversight-card:hover { box-shadow: var(--shadow); }
+  .oversight-card.blocking { border-left-color: var(--danger); }
+  .oversight-card.pending { border-left-color: var(--warning); }
+  .ov-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .ov-head h3 { font-size: 1.05rem; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .ov-head h3 a { color: inherit; text-decoration: none; }
+  .ov-head h3 a:hover { color: var(--primary); }
+  .ov-org { font-size: 0.8rem; color: var(--text-tertiary); }
+  .ov-metrics { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .ov-metric {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: var(--bg-soft); border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm); padding: 0.35rem 0.7rem;
+    font-size: 0.8rem; color: var(--text-secondary); font-weight: 550;
+  }
+  .ov-metric i { color: var(--primary); }
+  .ov-policy { font-size: 0.8rem; color: var(--text-tertiary); line-height: 1.6; }
+  .check-line { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.85rem; line-height: 1.5; }
+  .check-line i { margin-top: 0.15rem; flex-shrink: 0; }
+  .check-line.err { color: #b91c1c; }
+  .check-line.err i { color: var(--danger); }
+  .check-line.warn { color: #92400e; }
+  .check-line.warn i { color: var(--warning); }
+  .next-step {
+    display: flex; align-items: center; gap: 0.6rem;
+    background: var(--primary-light); border: 1px solid #c7d2fe;
+    border-radius: var(--radius-md); padding: 0.6rem 0.85rem;
+    font-size: 0.85rem; color: var(--primary-dark); font-weight: 550;
+  }
+  .next-step i { color: var(--primary); }
+  .ov-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>Election oversight</h1>
+    <p class="sub">
+      Readiness, schedule, officials, polling stations, accredited
+      representatives, open incidents and the governance policy for every
+      election you oversee. This dashboard is read-only — actions are taken on
+      the election workspace.
+    </p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="num">{{ election_total }}</span><span class="label"><i class="bi bi-diagram-3"></i> Elections overseen</span></div>
+    <div class="stat"><span class="num">{{ blocking_total }}</span><span class="label"><i class="bi bi-exclamation-octagon"></i> Blocking issues</span></div>
+    <div class="stat"><span class="num">{{ pending_total }}</span><span class="label"><i class="bi bi-hourglass-split"></i> Approvals pending</span></div>
+    <div class="stat"><span class="num">{{ incident_total }}</span><span class="label"><i class="bi bi-flag"></i> Open incidents</span></div>
+  </div>
+
+  {% if rows %}
+    <div class="oversight-list">
+      {% for row in rows %}
+        <section class="oversight-card{% if row.report.blocking %} blocking{% elif row.pending %} pending{% endif %}">
+          <div class="ov-head">
+            <div>
+              <h3><a href="{% url 'election_config' row.election.pk %}">{{ row.election.title }}</a></h3>
+              <span class="ov-org"><i class="bi bi-building"></i> {{ row.election.organization.name }}
+                &middot; {{ row.election.start_at|date:"Y-m-d H:i" }} &rarr; {{ row.election.end_at|date:"Y-m-d H:i" }}</span>
+            </div>
+            <span class="badge {% if row.election.state_badge %}{{ row.election.state_badge }}{% else %}badge-closed{% endif %}">{{ row.election.get_state_display }}</span>
+          </div>
+
+          <div class="ov-metrics">
+            <span class="ov-metric"><i class="bi bi-people"></i> {{ row.officials }} official(s)</span>
+            <span class="ov-metric"><i class="bi bi-geo-alt"></i> {{ row.stations }} station(s)</span>
+            <span class="ov-metric"><i class="bi bi-eye"></i> {{ row.representatives }} representative(s)</span>
+            <span class="ov-metric"><i class="bi bi-flag"></i> {{ row.open_incidents }} open incident(s)</span>
+          </div>
+
+          {% if row.report.blocking %}
+            {% for c in row.report.blocking %}
+              <div class="check-line err"><i class="bi bi-x-circle-fill"></i><span><strong>{{ c.label }}:</strong> {{ c.detail }}</span></div>
+            {% endfor %}
+          {% endif %}
+          {% for c in row.report.warnings %}
+            <div class="check-line warn"><i class="bi bi-exclamation-triangle-fill"></i><span><strong>{{ c.label }}:</strong> {{ c.detail }}</span></div>
+          {% endfor %}
+
+          {% if row.report.next_action %}
+            <div class="next-step">
+              <i class="bi bi-arrow-right-circle"></i>
+              <span>Next: <strong>{{ row.report.next_action.label }}</strong> — {{ row.report.next_action.who }}</span>
+            </div>
+          {% endif %}
+
+          <div class="ov-policy">
+            Certification: <strong>{{ row.policy.certify_label }}</strong> ·
+            Publication: <strong>{{ row.policy.publish_label }}</strong> ·
+            Four-eyes: {% if row.policy.require_institution_approval %}required{% else %}waived{% endif %}
+            {% if row.pending %} · <strong>{{ row.pending }}</strong> approval request(s) pending{% endif %}
+          </div>
+
+          <div class="ov-actions">
+            <a class="btn btn-sm btn-primary" href="{% url 'election_config' row.election.pk %}"><i class="bi bi-sliders"></i> Open workspace</a>
+            {% if row.can_certify %}<a class="btn btn-sm btn-outline" href="{% url 'results' row.election.pk %}"><i class="bi bi-bar-chart"></i> Results</a>{% endif %}
+            <a class="btn btn-sm btn-outline" href="{% url 'monitor' row.election.pk %}"><i class="bi bi-broadcast"></i> Live monitor</a>
+            {% if row.pending %}<a class="btn btn-sm btn-outline" href="{% url 'approvals_inbox' %}"><i class="bi bi-shield-check"></i> Approvals</a>{% endif %}
+          </div>
+        </section>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <span class="empty-icon"><i class="bi bi-clipboard-check"></i></span>
+      <h2>No elections to oversee</h2>
+      <p class="hint">You are not assigned to any election yet. A Super Admin can grant you the Election commission chair role for an institution.</p>
+      <a class="btn btn-primary" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Back to dashboard</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Recovery · VoteSys{% endblock %}
+{% block content %}
+<style>
+  .recovery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.35rem; align-items: start; }
+  .recovery-card { display: flex; flex-direction: column; gap: 0.85rem; }
+  .recovery-card > h2 { font-size: 1.02rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0; letter-spacing: -0.01em; }
+  .recovery-card > h2 i { color: var(--primary); }
+  .recovery-card .hint { margin: 0; }
+  .recovery-card form { display: flex; flex-direction: column; gap: 0.85rem; }
+  .warn-banner {
+    display: flex; gap: 0.7rem; align-items: flex-start;
+    background: var(--warning-bg); border: 1px solid #fde68a; color: #92400e;
+    border-radius: var(--radius-md); padding: 0.9rem 1.05rem; font-size: 0.85rem; line-height: 1.6;
+  }
+  .warn-banner i { font-size: 1.1rem; margin-top: 0.1rem; flex-shrink: 0; }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1><i class="bi bi-life-preserver"></i> Recovery actions</h1>
+    <p class="sub">
+      Explicit, audited interventions for the rare cases where a tenant-level
+      mistake has locked somebody out or left the console inconsistent. Each
+      action records the actor, the target, the documented reason and the
+      before/after value in the hash-chained audit log.
+    </p>
+  </div>
+
+  <div class="warn-banner">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <span>These actions bypass the normal tenant workflow. Use them only to restore access or consistency — never to influence an election outcome. Ballot secrecy is unaffected: no recovery action can read individual selections.</span>
+  </div>
+
+  <div class="recovery-grid">
+    <section class="card recovery-card">
+      <h2><i class="bi bi-person-check"></i> Restore console access</h2>
+      <p class="hint">Recompute a person's console (<code>is_staff</code>) flag from their role memberships. Safe and idempotent.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="restore_console_access">
+        <div class="form-group">
+          <label for="rc_username">Username</label>
+          <input class="input" id="rc_username" name="username" list="recent_users" placeholder="username" autocomplete="off" required>
+        </div>
+        <div class="form-group">
+          <label for="rc_reason">Reason (audited)</label>
+          <input class="input" id="rc_reason" name="reason" placeholder="e.g. locked out after role change" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-repeat"></i> Recompute access</button>
+      </form>
+    </section>
+
+    <section class="card recovery-card">
+      <h2><i class="bi bi-unlock"></i> Unlock an account</h2>
+      <p class="hint">Re-activate a disabled account (<code>is_active</code>). Does not grant any role.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="unlock_user">
+        <div class="form-group">
+          <label for="ul_username">Username</label>
+          <input class="input" id="ul_username" name="username" list="recent_users" placeholder="username" autocomplete="off" required>
+        </div>
+        <div class="form-group">
+          <label for="ul_reason">Reason (audited)</label>
+          <input class="input" id="ul_reason" name="reason" placeholder="e.g. account disabled in error" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-unlock"></i> Unlock account</button>
+      </form>
+    </section>
+
+    <section class="card recovery-card">
+      <h2><i class="bi bi-building-gear"></i> Toggle an organization</h2>
+      <p class="hint">Activate or deactivate a tenant. Deactivated tenants are excluded from normal listings.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="toggle_organization">
+        <div class="form-group">
+          <label for="org_select">Organization</label>
+          <select class="input" id="org_select" name="organization" required>
+            <option value="">— choose —</option>
+            {% for o in organizations %}<option value="{{ o.pk }}">{{ o.name }}{% if not o.is_active %} (inactive){% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="org_reason">Reason (audited)</label>
+          <input class="input" id="org_reason" name="reason" placeholder="e.g. tenant merged" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-toggle-on"></i> Toggle organization</button>
+      </form>
+    </section>
+
+    <section class="card recovery-card">
+      <h2><i class="bi bi-arrow-repeat"></i> Clear config cache</h2>
+      <p class="hint">Drop cached (unfrozen) election configuration. Choose one election or clear all.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="clear_config_cache">
+        <div class="form-group">
+          <label for="cache_election">Election</label>
+          <select class="input" id="cache_election" name="election">
+            <option value="">— all elections —</option>
+            {% for e in elections %}<option value="{{ e.pk }}">{{ e.title }} · {{ e.organization.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cache_reason">Reason (audited)</label>
+          <input class="input" id="cache_reason" name="reason" placeholder="e.g. stale config after fix" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-eraser"></i> Clear cache</button>
+      </form>
+    </section>
+  </div>
+
+  <datalist id="recent_users">
+    {% for u in users %}<option value="{{ u.get_username }}">{% endfor %}
+  </datalist>
+</div>
+{% endblock %}

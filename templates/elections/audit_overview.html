@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Audit overview · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Audit overview ---- */
+  .ao-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+  .integrity { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 650; }
+  .integrity.ok { color: var(--success); }
+  .integrity.bad { color: var(--danger); }
+  .event-action { font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace; font-size: 0.78rem; }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>Security &amp; audit</h1>
+    <p class="sub">
+      Every consequential action is written to an append-only, hash-chained log
+      — one chain per election — and can be sealed with a signed checkpoint.
+      This page recomputes each chain's hashes so tampering is immediately
+      visible.
+    </p>
+  </div>
+
+  <div class="ao-stats">
+    <div class="stat"><span class="num">{{ rows|length }}</span><span class="label"><i class="bi bi-link-45deg"></i> Chains</span></div>
+    <div class="stat"><span class="num">{{ ok_total }}</span><span class="label"><i class="bi bi-shield-check"></i> Verified</span></div>
+    <div class="stat"><span class="num">{{ broken_total }}</span><span class="label"><i class="bi bi-exclamation-octagon"></i> Broken</span></div>
+  </div>
+
+  {% if broken_total %}
+    <div class="notice notice-danger">
+      <i class="bi bi-exclamation-octagon"></i>
+      <span>{{ broken_total }} chain(s) failed verification. Do not certify or publish affected elections until an administrator investigates.</span>
+    </div>
+  {% endif %}
+
+  {% if rows %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Election</th>
+            <th>Integrity</th>
+            <th data-sortable data-type="num">Events</th>
+            <th>Last action</th>
+            <th data-sortable data-type="num">Checkpoints</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <div class="cell-main">
+                  <strong>{{ row.election.title }}</strong>
+                  <span class="hint">{{ row.election.organization.name }}</span>
+                </div>
+              </td>
+              <td>
+                {% if row.chain.ok %}
+                  <span class="integrity ok"><i class="bi bi-shield-check"></i> Verified</span>
+                {% else %}
+                  <span class="integrity bad" title="{{ row.chain.error }}"><i class="bi bi-exclamation-octagon"></i> Broken @ {{ row.chain.first_bad_seq }}</span>
+                {% endif %}
+              </td>
+              <td>{{ row.chain.events }}</td>
+              <td>
+                {% if row.last_event %}
+                  <div class="cell-main">
+                    <span class="event-action">{{ row.last_event.action }}</span>
+                    <span class="hint">{{ row.last_event.created_at|date:"Y-m-d H:i" }}</span>
+                  </div>
+                {% else %}
+                  <span class="hint">No events yet</span>
+                {% endif %}
+              </td>
+              <td>{{ row.checkpoints }}</td>
+              <td>
+                <div class="action-links">
+                  <a href="{% url 'election_audit' row.election.pk %}"><i class="bi bi-file-earmark-text"></i> Full trail</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <span class="empty-icon"><i class="bi bi-link-45deg"></i></span>
+      <h2>No audit chains yet</h2>
+      <p class="hint">Chains appear here as soon as elections in your scope record their first event.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,158 +1,665 @@
 {% extends "base.html" %}
-{% block title %}Configure · {{ election.title }}{% endblock %}
+{% block title %}Workspace · {{ election.title }}{% endblock %}
 {% block content %}
-<div class="admin-content">
-  <h1>{{ election.title }}</h1>
-  <p>
-    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
-    &middot; <a href="{% url 'election_voters' election.pk %}">Voter registry</a>
-    &middot; <a href="{% url 'monitor' election.pk %}">Live monitor</a>
-    &middot; <a href="{% url 'election_audit' election.pk %}">Audit trail</a>
-    &middot; <a href="{% url 'representatives_list' election.pk %}">Representatives</a>
-    &middot; <a href="{% url 'incident_list' election.pk %}">Incidents</a>
-    &middot; <a href="{% url 'results' election.pk %}">Results</a>
-  </p>
+<style>
+  /* ===================== Election workspace ===================== */
+  .ws-head { display: flex; flex-direction: column; gap: 0.6rem; }
+  .ws-crumbs { font-size: 0.8rem; color: var(--text-tertiary); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .ws-crumbs a { color: var(--text-tertiary); text-decoration: none; }
+  .ws-crumbs a:hover { color: var(--primary); }
 
+  /* Readiness banner */
+  .ready-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    padding: 1rem 1.2rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid;
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+  .ready-banner i { font-size: 1.3rem; margin-top: 0.1rem; flex-shrink: 0; }
+  .ready-banner.ok { background: var(--success-bg); border-color: #bbf7d0; color: #065f46; }
+  .ready-banner.warn { background: var(--warning-bg); border-color: #fde68a; color: #92400e; }
+  .ready-banner.blocked { background: var(--danger-bg); border-color: #fecaca; color: #991b1b; }
+  .ready-banner .rb-title { font-weight: 700; display: block; margin-bottom: 0.15rem; }
+
+  /* Checklist */
+  .checklist { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
+  .check-item {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    box-shadow: var(--shadow-xs);
+  }
+  .check-item .ci-icon { font-size: 1.15rem; margin-top: 0.1rem; flex-shrink: 0; }
+  .check-item.ok .ci-icon { color: var(--success); }
+  .check-item.warn .ci-icon { color: var(--warning); }
+  .check-item.err .ci-icon { color: var(--danger); }
+  .check-item .ci-label { font-weight: 650; font-size: 0.9rem; color: var(--text-primary); }
+  .check-item .ci-detail { font-size: 0.8rem; color: var(--text-tertiary); line-height: 1.5; }
+  .check-item .ci-who { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 650; margin-top: 0.2rem; display: inline-block; }
+
+  /* Next step */
+  .next-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(180deg, #eef2ff 0%, #fff 100%);
+    border: 1px solid #c7d2fe;
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    flex-wrap: wrap;
+  }
+  .next-card .nc-icon {
+    width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--primary); color: #fff; font-size: 1.2rem;
+  }
+  .next-card .nc-body { flex: 1 1 260px; min-width: 0; }
+  .next-card .nc-label { font-weight: 700; color: var(--primary-dark); font-size: 0.95rem; }
+  .next-card .nc-who { font-size: 0.8rem; color: var(--text-tertiary); }
+
+  /* Lifecycle actions */
+  .action-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .lifecycle-block { display: flex; flex-direction: column; gap: 1rem; }
+  .approval-request { border: 1px dashed var(--border-color-strong); border-radius: var(--radius-md); padding: 1rem; background: var(--bg-soft); display: flex; flex-direction: column; gap: 0.65rem; }
+  .approval-request h4 { font-size: 0.88rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.4rem; }
+  .approval-request h4 i { color: var(--warning); }
+
+  .approval-item {
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--warning);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .approval-item .ai-top { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+  .approval-item .ai-kind { font-weight: 650; font-size: 0.88rem; }
+  .approval-item .ai-meta { font-size: 0.76rem; color: var(--text-tertiary); }
+  .approval-item .ai-reason { font-size: 0.82rem; color: var(--text-secondary); background: var(--bg-soft); border-radius: var(--radius-sm); padding: 0.55rem 0.7rem; }
+  .decide-inline { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .decide-inline input { flex: 1 1 220px; }
+
+  .decision-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+  .decision-list li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-secondary); flex-wrap: wrap; }
+
+  /* Setup steps */
+  .step-card { position: relative; padding-left: 4.25rem; }
+  .step-num {
+    position: absolute; left: 1.4rem; top: 1.5rem;
+    width: 34px; height: 34px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 750; font-size: 0.85rem;
+    background: linear-gradient(160deg, var(--primary-hover) 0%, var(--primary-dark) 100%);
+    color: #fff; box-shadow: 0 6px 14px -4px rgb(99 102 241 / 55%);
+  }
+  .step-card.done .step-num { background: linear-gradient(160deg, #10b981 0%, var(--success) 100%); box-shadow: 0 6px 14px -4px rgb(5 150 105 / 50%); }
+  .step-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .step-card > h2 { font-size: 1.1rem; font-weight: 700; margin: 0; letter-spacing: -0.015em; }
+  .step-status { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 0.35rem; }
+  .step-status.done { color: var(--success); }
+  .step-status.todo { color: var(--text-muted); }
+
+  .pos-block { display: flex; flex-direction: column; gap: 0.9rem; padding: 1.1rem 0; border-bottom: 1px dashed var(--border-color-strong); }
+  .pos-block:last-of-type { border-bottom: none; }
+  .pos-head-row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .pos-head-row h3 { font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+
+  .add-form { max-width: 560px; display: flex; flex-direction: column; gap: 0.65rem; }
+  .add-box { border: 1px dashed var(--border-color-strong); border-radius: var(--radius-md); padding: 1rem; background: var(--bg-soft); }
+  .add-box h3 { font-size: 0.9rem; font-weight: 700; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.45rem; color: var(--text-secondary); }
+  .add-box h3 i { color: var(--primary); }
+
+  .hash-code { background: var(--bg-secondary); padding: 0.25rem 0.55rem; border-radius: var(--radius-xs); font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace; font-size: 0.78rem; word-break: break-all; }
+  .hash-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.82rem; color: var(--text-tertiary); }
+
+  .quick-links { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+  /* ---- Candidate passport photographs (management screens) ---- */
+  .cand-photo-thumb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 58px; /* passport ratio 3:4-ish */
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .cand-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cand-photo-thumb.empty { background: linear-gradient(160deg, var(--primary-light) 0%, #e0e7ff 100%); color: var(--primary-dark); font-weight: 700; font-size: 0.85rem; }
+  .cand-cell { display: flex; align-items: center; gap: 0.65rem; }
+  .no-photo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--warning-bg);
+    color: #92400e;
+    border: 1px solid #fde68a;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  /* Live preview of the selected upload in the "add candidate" box. */
+  .photo-preview-box {
+    display: none;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.6rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+  }
+  .photo-preview-box.visible { display: flex; }
+  .photo-preview-box img { width: 66px; height: 88px; object-fit: cover; border-radius: var(--radius-xs); border: 1px solid var(--border-color); }
+  .photo-preview-box .pp-meta { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--text-tertiary); }
+  .photo-preview-box .pp-name { font-weight: 650; color: var(--text-secondary); }
+
+  @media (max-width: 768px) {
+    .step-card { padding-left: 1rem; padding-top: 3.25rem; }
+    .step-num { left: 1rem; top: 1.1rem; }
+  }
+</style>
+
+<div class="admin-content">
+  {# ---------------------------------------------------------------- header #}
+  <div class="ws-head page-head">
+    <div class="ws-crumbs">
+      <a href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <i class="bi bi-chevron-right"></i>
+      <a href="{% url 'manage_organizations' %}">{{ election.organization.name }}</a>
+      <i class="bi bi-chevron-right"></i>
+      <span>{{ election.title }}</span>
+    </div>
+    <div class="page-head-row">
+      <div>
+        <h1>{{ election.title }}</h1>
+        <p class="sub">
+          {% if election.description %}{{ election.description }}{% else %}Setup, approval and lifecycle for this election.{% endif %}
+        </p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end;">
+        <span class="badge {% if election.state_badge %}{{ election.state_badge }}{% else %}badge-closed{% endif %}">{{ election.get_state_display }}</span>
+        {% if election.config_frozen_at %}<span class="hint"><i class="bi bi-snow"></i> Config frozen {{ election.config_frozen_at|date:"Y-m-d H:i" }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="quick-links">
+      <a class="btn btn-sm btn-outline" href="{% url 'election_voters' election.pk %}"><i class="bi bi-people"></i> Voter registry</a>
+      <a class="btn btn-sm btn-outline" href="{% url 'monitor' election.pk %}"><i class="bi bi-broadcast"></i> Live monitor</a>
+      <a class="btn btn-sm btn-outline" href="{% url 'live_board' election.pk %}" target="_blank" rel="noopener noreferrer"><i class="bi bi-easel2"></i> Results board</a>
+      <a class="btn btn-sm btn-outline" href="{% url 'election_audit' election.pk %}"><i class="bi bi-file-earmark-text"></i> Audit trail</a>
+      <a class="btn btn-sm btn-outline" href="{% url 'results' election.pk %}"><i class="bi bi-bar-chart"></i> Results</a>
+      <a class="btn btn-sm btn-outline" href="{% url 'representatives_list' election.pk %}"><i class="bi bi-eye"></i> Representatives</a>
+      <a class="btn btn-sm btn-outline" href="{% url 'incident_list' election.pk %}"><i class="bi bi-exclamation-triangle"></i> Incidents</a>
+      {% if election.state == election.STATE_DRAFT %}
+        <a class="btn btn-sm btn-outline" href="{% url 'election_edit' election.pk %}"><i class="bi bi-pencil"></i> Edit rules</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# --------------------------------------------------------- readiness #}
   <section class="card inline-section">
-    <h2>1 · Election rules</h2>
-    <p class="hint">
-      Voting: {{ election.start_at|date:"Y-m-d H:i" }} &rarr; {{ election.end_at|date:"Y-m-d H:i" }} ·
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+      <i class="bi bi-clipboard-check" style="color: var(--primary);"></i> Readiness
+    </h2>
+
+    {% if readiness.ready %}
+      <div class="ready-banner ok">
+        <i class="bi bi-check-circle-fill"></i>
+        <div>
+          <span class="rb-title">Setup looks complete.</span>
+          The ballot has positions with approved candidates and a valid schedule.{% if readiness.warnings %} {{ readiness.warnings|length }} advisory warning(s) below — review before opening.{% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="ready-banner blocked">
+        <i class="bi bi-exclamation-octagon-fill"></i>
+        <div>
+          <span class="rb-title">Setup is not ready yet — {{ readiness.blocking|length }} blocking issue(s).</span>
+          Fix the red items below; the lifecycle will refuse to schedule or open until they are resolved.
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="checklist">
+      {% for c in readiness.checks %}
+        <div class="check-item {% if c.ok %}ok{% elif c.severity == 'warning' %}warn{% else %}err{% endif %}">
+          <i class="bi ci-icon {% if c.ok %}bi-check-circle-fill{% elif c.severity == 'warning' %}bi-exclamation-triangle-fill{% else %}bi-x-circle-fill{% endif %}"></i>
+          <div>
+            <div class="ci-label">{{ c.label }}</div>
+            <div class="ci-detail">{{ c.detail }}</div>
+            {% if not c.ok %}<span class="ci-who">Responsible: {{ c.responsible }}</span>{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---------------------------------------------------------- next step #}
+  {% if next_action %}
+    <div class="next-card">
+      <span class="nc-icon"><i class="bi bi-arrow-right"></i></span>
+      <div class="nc-body">
+        <div class="nc-label">Next step: {{ next_action.label }}</div>
+        <div class="nc-who">Who acts: {{ next_action.who }}</div>
+      </div>
+      {% if next_action.action == 'fix_setup' %}
+        <span class="hint">Complete the numbered setup steps below.</span>
+      {% else %}
+        <a class="btn btn-primary" href="#lifecycle"><i class="bi bi-lightning-charge"></i> Go to actions</a>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# ---------------------------------------------------------- lifecycle #}
+  <section class="card inline-section" id="lifecycle">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+      <i class="bi bi-signpost-split" style="color: var(--primary);"></i> Lifecycle
+    </h2>
+
+    {% if transitions or dual_transitions %}
+      {% if transitions %}
+        <div class="action-row">
+          {% for t in transitions %}
+            {% if t.action %}
+              <form method="post" action="{% url 'election_action' election.pk %}" {% if t.target == election.STATE_ARCHIVED %}onsubmit="return confirm('Archive this election? This is a terminal state.');"{% endif %}>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="{{ t.action }}">
+                <button class="btn btn-sm {% if next_action and next_action.action == t.action %}btn-primary{% elif t.target == election.STATE_ARCHIVED %}btn-outline{% else %}btn-outline{% endif %}" type="submit">
+                  {% if t.target == election.STATE_ARCHIVED %}<i class="bi bi-archive"></i>{% elif t.target == election.STATE_OPEN %}<i class="bi bi-unlock"></i>{% elif t.target == election.STATE_CLOSED %}<i class="bi bi-lock"></i>{% else %}<i class="bi bi-arrow-right-circle"></i>{% endif %}
+                  {{ t.label }}{% if next_action and next_action.action == t.action %} · recommended{% endif %}
+                </button>
+              </form>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <p class="hint" style="margin: 0;">Every change is enforced by the server and written to the audit chain. Buttons shown here are only suggestions.</p>
+      {% endif %}
+
+      {% if dual_transitions %}
+        <div class="lifecycle-block">
+          <div class="notice notice-warning">
+            <i class="bi bi-shield-lock"></i>
+            <span>The following transitions need a documented request and a second administrator's approval (four-eyes). You cannot approve your own request.</span>
+          </div>
+          {% for t in dual_transitions %}
+            <form class="approval-request" method="post" action="{% url 'approval_request' election.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="kind" value="{{ t.dual }}">
+              <h4><i class="bi bi-shield-check"></i> {{ t.label }} — request approval</h4>
+              <label class="hint" for="reason-{{ t.target }}">Documented justification (stored permanently in the audit trail)</label>
+              <textarea class="input" id="reason-{{ t.target }}" name="reason" rows="3" placeholder="Explain why this transition is necessary…" required></textarea>
+              <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send"></i> Submit request</button></div>
+            </form>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="notice notice-info"><i class="bi bi-flag"></i> No lifecycle transitions are available from this state.{% if election.state == election.STATE_ARCHIVED %} This election is archived.{% endif %}</div>
+    {% endif %}
+
+    {# Pending approvals #}
+    {% if pending_approvals %}
+      <div class="lifecycle-block">
+        <h3 style="font-size: 0.92rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.45rem;"><i class="bi bi-hourglass-split" style="color: var(--warning);"></i> Pending approval requests</h3>
+        {% for a in pending_approvals %}
+          <div class="approval-item">
+            <div class="ai-top">
+              <span class="ai-kind">{{ a.get_kind_display }}</span>
+              <span class="badge badge-warning">Pending</span>
+            </div>
+            <div class="ai-meta">Requested by {{ a.requested_by.get_username|default:"—" }} · {{ a.requested_at|date:"Y-m-d H:i" }}</div>
+            <div class="ai-reason">{{ a.reason }}</div>
+            {% if a.can_decide %}
+              <form class="decide-inline" method="post" action="{% url 'approval_decide' a.pk %}">
+                {% csrf_token %}
+                <input class="input" type="text" name="note" placeholder="Decision note (optional)">
+                <button class="btn btn-sm btn-success" type="submit" name="decision" value="approve"><i class="bi bi-check-lg"></i> Approve</button>
+                <button class="btn btn-sm btn-danger" type="submit" name="decision" value="reject"><i class="bi bi-x-lg"></i> Reject</button>
+              </form>
+            {% elif not can_approve %}
+              <div class="hint"><i class="bi bi-info-circle"></i> Waiting for an organization administrator to decide.</div>
+            {% else %}
+              <div class="hint"><i class="bi bi-info-circle"></i> You submitted this request; another administrator must decide it.</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Decided approvals #}
+    {% if decided_approvals %}
+      <div class="lifecycle-block">
+        <h3 style="font-size: 0.92rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.45rem;"><i class="bi bi-clock-history" style="color: var(--primary);"></i> Recent decisions</h3>
+        <ul class="decision-list">
+          {% for a in decided_approvals %}
+            <li>
+              {% if a.status == 'approved' %}<i class="bi bi-check-circle-fill" style="color: var(--success);"></i>{% else %}<i class="bi bi-x-circle-fill" style="color: var(--danger);"></i>{% endif %}
+              <strong>{{ a.get_kind_display }}</strong>
+              <span>{{ a.get_status_display }}</span>
+              <span class="hint">by {{ a.decided_by.get_username|default:"—" }} · {{ a.decided_at|date:"Y-m-d H:i"|default:"—" }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </section>
+
+  {# -------------------------------------------------- step 1: rules #}
+  <section class="card inline-section step-card {% if readiness.ready %}done{% endif %}">
+    <span class="step-num" aria-hidden="true">1</span>
+    <div class="step-head">
+      <h2>Rules &amp; schedule</h2>
+      <span class="step-status {% if readiness.ready %}done{% else %}todo{% endif %}">
+        <i class="bi {% if readiness.ready %}bi-check-circle-fill{% else %}bi-circle{% endif %}"></i> {% if readiness.ready %}Ready{% else %}To do{% endif %}
+      </span>
+    </div>
+    <p class="hint" style="margin: 0;">
+      Voting window: {{ election.start_at|date:"Y-m-d H:i" }} &rarr; {{ election.end_at|date:"Y-m-d H:i" }} ·
+      Type: {{ election.get_ballot_type_display }} ·
       Blank votes: {{ election.allow_blank|yesno:"allowed,not allowed" }} ·
       Results: {{ election.get_results_visibility_display }}
     </p>
-    {% if election.state == election.STATE_DRAFT %}
-      <a class="btn btn-sm btn-outline" href="{% url 'election_edit' election.pk %}">Edit rules</a>
+    {% if can_edit_structure %}
+      <a class="btn btn-sm btn-outline" href="{% url 'election_edit' election.pk %}" style="align-self: flex-start;"><i class="bi bi-pencil"></i> Edit rules</a>
     {% else %}
-      <p class="hint">Rules are locked once the election leaves DRAFT.</p>
+      <div class="notice notice-info" style="align-self: stretch;"><i class="bi bi-lock"></i> Rules are locked once the election leaves DRAFT.</div>
     {% endif %}
   </section>
 
-  <section class="card inline-section">
-    <h2>2 · Positions &amp; candidates</h2>
+  {# ------------------------------------------ step 2: positions/candidates #}
+  <section class="card inline-section step-card {% if not readiness.blocking %}done{% endif %}">
+    <span class="step-num" aria-hidden="true">2</span>
+    <div class="step-head">
+      <h2>Positions &amp; candidates</h2>
+      <span class="step-status {% if positions %}done{% else %}todo{% endif %}">
+        <i class="bi {% if positions %}bi-check-circle-fill{% else %}bi-circle{% endif %}"></i> {% if positions %}{{ positions|length }} position(s){% else %}Not started{% endif %}
+      </span>
+    </div>
+
     {% for pos in positions %}
-      <div class="position-section">
-        <div class="position-header">
+      <div class="pos-block">
+        <div class="pos-head-row">
           <h3>{{ pos.title }} <span class="hint">(max {{ pos.max_choices }} choice{{ pos.max_choices|pluralize }})</span></h3>
-          {% if election.state == election.STATE_DRAFT %}
+          {% if can_edit_structure %}
             <form method="post" action="{% url 'position_delete' election.pk pos.pk %}">
-              {% csrf_token %}<button class="btn btn-sm btn-outline" type="submit">Remove</button>
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline" type="submit" onclick="return confirm('Remove this position and its candidates?');"><i class="bi bi-trash"></i> Remove</button>
             </form>
           {% endif %}
         </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Photo</th><th>Candidate</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {% for c in pos.candidates.all %}
+                <tr>
+                  <td>
+                    <span class="cand-photo-thumb {% if not c.photo %}empty{% endif %}">
+                      {% if c.photo %}
+                        <img src="{{ c.photo.url }}" alt="Photograph of {{ c.full_name }}" loading="lazy">
+                      {% else %}
+                        {{ c.initials }}
+                      {% endif %}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="cand-cell">
+                      <div>
+                        <strong>{{ c.full_name }}</strong>
+                        {% if not c.photo %}<br><span class="no-photo-badge"><i class="bi bi-image-alt"></i> No photo</span>{% endif %}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    {% if c.status == 'approved' %}<span class="badge badge-open">Approved</span>
+                    {% elif c.status == 'rejected' %}<span class="badge badge-danger">Rejected</span>
+                    {% else %}<span class="badge badge-closed">{{ c.get_status_display }}</span>{% endif %}
+                  </td>
+                  <td class="action-links">
+                    <a class="btn btn-sm btn-outline" href="{% url 'candidate_edit' election.pk c.pk %}"><i class="bi bi-pencil"></i> Edit</a>
+                    {% if can_edit_structure %}
+                      <form method="post" action="{% url 'candidate_delete' election.pk c.pk %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline" type="submit" onclick="return confirm('Remove this candidate?');"><i class="bi bi-trash"></i> Remove</button>
+                      </form>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4"><span class="hint">No candidates yet — add at least one approved candidate so this position is contestable.</span></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if can_edit_structure %}
+          <form method="post" action="{% url 'candidate_add' election.pk pos.pk %}" class="add-form" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="add-box">
+              <h3><i class="bi bi-person-plus"></i> Add candidate to {{ pos.title }}</h3>
+              {{ candidate_form.as_div }}
+              <div class="photo-preview-box" data-photo-preview>
+                <img src="" alt="Preview of the selected passport photograph" data-photo-preview-img>
+                <div class="pp-meta">
+                  <span class="pp-name">Passport photograph preview</span>
+                  <span data-photo-preview-name></span>
+                  <span>JPEG, PNG or WebP — the photo appears on the voter ballot.</span>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-circle"></i> Add candidate</button>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+    {% empty %}
+      <div class="notice notice-info"><i class="bi bi-info-circle"></i> No positions defined yet — add at least one below to build the ballot.</div>
+    {% endfor %}
+
+    {% if can_edit_structure %}
+      <div class="add-box" style="max-width: 560px;">
+        <h3><i class="bi bi-plus-square"></i> Add position</h3>
+        <form method="post" action="{% url 'position_add' election.pk %}" class="add-form">
+          {% csrf_token %}
+          {{ position_form.as_div }}
+          <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-circle"></i> Add position</button></div>
+        </form>
+      </div>
+    {% endif %}
+
+    <div class="hash-row">
+      <span><i class="bi bi-fingerprint"></i> Configuration hash (frozen at scheduling):</span>
+      <code class="hash-code">{{ config_hash|default:"not frozen yet" }}</code>
+      {% if config_hash %}
+        <button type="button" class="copy-btn" data-copy="{{ config_hash }}"><i class="bi bi-copy"></i> Copy</button>
+      {% endif %}
+    </div>
+  </section>
+
+  {# --------------------------------------------- step 3: stations #}
+  <section class="card inline-section step-card {% if stations %}done{% endif %}">
+    <span class="step-num" aria-hidden="true">3</span>
+    <div class="step-head">
+      <h2>Polling stations</h2>
+      <span class="step-status {% if stations %}done{% else %}todo{% endif %}">
+        <i class="bi {% if stations %}bi-check-circle-fill{% else %}bi-circle{% endif %}"></i> {% if stations %}{{ stations|length }} station(s){% else %}Optional{% endif %}
+      </span>
+    </div>
+    {% if stations %}
+      <div class="table-wrap">
         <table>
-          <thead><tr><th>Candidate</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Code</th><th>Location</th><th>Channel</th><th>Status</th></tr></thead>
           <tbody>
-            {% for c in pos.candidates.all %}
+            {% for s in stations %}
               <tr>
-                <td>{{ c.full_name }}</td>
-                <td>{{ c.get_status_display }}</td>
-                <td class="action-links">
-                  {% if election.state == election.STATE_DRAFT %}
-                    <form method="post" action="{% url 'candidate_delete' election.pk c.pk %}">
-                      {% csrf_token %}<button class="btn btn-sm btn-outline" type="submit">Remove</button>
-                    </form>
-                  {% endif %}
-                </td>
+                <td><strong>{{ s.name }}</strong></td>
+                <td>{% if s.code %}<code>{{ s.code }}</code>{% else %}<span class="hint">—</span>{% endif %}</td>
+                <td>{{ s.location|default:"—" }}</td>
+                <td>{{ s.get_channel_display }}</td>
+                <td><span class="badge {% if s.status == 'active' %}badge-open{% else %}badge-closed{% endif %}">{{ s.get_status_display }}</span></td>
               </tr>
-            {% empty %}
-              <tr><td colspan="3" class="hint">No candidates yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>
-        {% if election.state == election.STATE_DRAFT %}
-          <form method="post" action="{% url 'candidate_add' election.pk pos.pk %}">
-            {% csrf_token %}
-            {{ candidate_form.as_div }}
-            <button class="btn btn-sm btn-primary" type="submit">Add candidate</button>
-          </form>
-        {% endif %}
       </div>
-    {% empty %}
-      <p class="hint">No positions defined yet — add at least one.</p>
-    {% endfor %}
-
-    {% if election.state == election.STATE_DRAFT %}
-      <h3>Add position</h3>
-      <form method="post" action="{% url 'position_add' election.pk %}">
-        {% csrf_token %}
-        {{ position_form.as_div }}
-        <button class="btn btn-sm btn-primary" type="submit">Add position</button>
-      </form>
+    {% else %}
+      <div class="notice notice-info"><i class="bi bi-info-circle"></i> Optional for online-only elections, but needed for on-site voting and per-station monitoring.</div>
     {% endif %}
-    <p class="hint">Configuration hash (frozen at scheduling):
-      <code>{{ config_hash|default:"not frozen yet" }}</code></p>
-  </section>
 
-  <section class="card inline-section">
-    <h2>3 · Polling stations</h2>
-    <ul>
-      {% for s in stations %}<li>{{ s.name }} — {{ s.get_channel_display }} ({{ s.get_status_display }})</li>{% empty %}
-        <li class="hint">No polling stations defined.</li>{% endfor %}
-    </ul>
-    <form method="post" action="{% url 'station_add' election.pk %}">
-      {% csrf_token %}
-      {{ station_form.as_div }}
-      <button class="btn btn-sm btn-primary" type="submit">Add station</button>
-    </form>
-  </section>
-
-  <section class="card inline-section">
-    <h2>4 · Lifecycle</h2>
-    <p class="hint">Every transition below is enforced in the backend; the buttons only
-      invoke it. Four-eyes actions require a documented request plus an independent
-      approver.</p>
-    <div class="action-links">
-      {% for t in transitions %}
-        {% if t.dual %}
-          <span class="hint">{{ t.label }} &mdash; requires approval (see below)</span>
-        {% else %}
-          <form method="post" action="{% url 'election_action' election.pk %}" class="inline">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="{{ t.target }}">
-            <button class="btn btn-sm btn-primary" type="submit">{{ t.label }}</button>
-          </form>
-        {% endif %}
-      {% empty %}
-        <p class="hint">No transitions are available from {{ election.get_state_display }}.</p>
-      {% endfor %}
-    </div>
-
-    <h3>Four-eyes approvals</h3>
-    {% for a in pending_approvals %}
-      <div class="inline-card">
-        <p><strong>{{ a.get_kind_display }}</strong> — requested by
-          {{ a.requested_by }}: {{ a.reason }}</p>
-        {% if can_approve %}
-          <form method="post" action="{% url 'approval_decide' a.pk %}" class="inline">
-            {% csrf_token %}
-            <input type="hidden" name="decision" value="approve">
-            <input class="input" name="note" placeholder="Decision note">
-            <button class="btn btn-sm btn-success" type="submit">Approve &amp; apply</button>
-          </form>
-          <form method="post" action="{% url 'approval_decide' a.pk %}" class="inline">
-            {% csrf_token %}
-            <input type="hidden" name="decision" value="reject">
-            <button class="btn btn-sm btn-outline" type="submit">Reject</button>
-          </form>
-        {% else %}
-          <p class="hint">Waiting for an independent administrator to decide.</p>
-        {% endif %}
-      </div>
-    {% empty %}
-      <p class="hint">No pending approval requests.</p>
-    {% endfor %}
-
-    {% for t in transitions %}
-      {% if t.dual %}
-        <form method="post" action="{% url 'approval_request' election.pk %}">
+    {% if can_edit_stations %}
+      <div class="add-box" style="max-width: 560px;">
+        <h3><i class="bi bi-geo-alt"></i> Add station</h3>
+        <form method="post" action="{% url 'station_add' election.pk %}" class="add-form">
           {% csrf_token %}
-          <input type="hidden" name="kind" value="{{ t.dual }}">
-          <h4>Request: {{ t.label }}</h4>
-          {{ approval_form.as_div }}
-          <button class="btn btn-sm btn-primary" type="submit">Submit request</button>
+          {{ station_form.as_div }}
+          <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-circle"></i> Add station</button></div>
         </form>
-      {% endif %}
-    {% endfor %}
+      </div>
+    {% endif %}
   </section>
+
+  {# --------------------------------------------- step 4: voter registry #}
+  <section class="card inline-section step-card {% if voter_active %}done{% endif %}">
+    <span class="step-num" aria-hidden="true">4</span>
+    <div class="step-head">
+      <h2>Voter registry</h2>
+      <span class="step-status {% if voter_active %}done{% else %}todo{% endif %}">
+        <i class="bi {% if voter_active %}bi-check-circle-fill{% else %}bi-circle{% endif %}"></i> {{ voter_active }} active / {{ voter_total }} total
+      </span>
+    </div>
+    {% if registration_open %}
+      <div class="notice notice-success"><i class="bi bi-unlock"></i> Registration is open. Add or import voters and issue single-use credentials.</div>
+    {% elif voter_active %}
+      <p class="hint" style="margin: 0;">The registry is frozen for voting. Corrections are still possible through the registry (unused credentials can be revoked).</p>
+    {% else %}
+      <div class="notice notice-warning"><i class="bi bi-exclamation-triangle"></i> No active voters yet. Open registration (submit) and register them during the REGISTRATION phase.</div>
+    {% endif %}
+    <div class="action-row">
+      <a class="btn btn-sm btn-primary" href="{% url 'election_voters' election.pk %}"><i class="bi bi-people"></i> Manage voter registry</a>
+    </div>
+  </section>
+
+  {# --------------------------------------------- governance policy #}
+  <section class="card inline-section" id="governance">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+      <i class="bi bi-shield-check" style="color: var(--primary);"></i> Governance &amp; approvals policy
+    </h2>
+    <p class="hint" style="margin: 0;">
+      Certification: <strong>{{ governance_summary.certify_label }}</strong> ·
+      Publication: <strong>{{ governance_summary.publish_label }}</strong> ·
+      Second approver (four-eyes):
+      {% if governance_summary.require_institution_approval %}<strong>required</strong>{% else %}<strong>waived</strong>{% endif %}
+    </p>
+    <ul class="decision-list">
+      <li>Configuration approval:
+        {% if governance_summary.dual_control.approve_config %}<i class="bi bi-check-circle-fill" style="color: var(--success);"></i> four-eyes{% else %}<i class="bi bi-dash-circle" style="color: var(--text-muted);"></i> direct{% endif %}</li>
+      <li>Reopening a closed election:
+        {% if governance_summary.dual_control.reopen %}<i class="bi bi-check-circle-fill" style="color: var(--success);"></i> four-eyes{% else %}<i class="bi bi-dash-circle" style="color: var(--text-muted);"></i> direct{% endif %}</li>
+      <li>Corrections / decertify:
+        {% if governance_summary.dual_control.decertify %}<i class="bi bi-check-circle-fill" style="color: var(--success);"></i> four-eyes{% else %}<i class="bi bi-dash-circle" style="color: var(--text-muted);"></i> direct{% endif %}</li>
+    </ul>
+
+    {% if can_govern %}
+      <div class="add-box" style="max-width: 620px;">
+        <h3><i class="bi bi-sliders2"></i> Change the policy (DRAFT only)</h3>
+        <form method="post" action="{% url 'election_governance' election.pk %}" class="add-form">
+          {% csrf_token %}
+          {{ governance_form.as_div }}
+          <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-save"></i> Save policy</button></div>
+        </form>
+      </div>
+    {% else %}
+      <div class="notice notice-info"><i class="bi bi-lock"></i> The policy can only be changed by the Super Admin or an election administrator, and only while the election is in DRAFT.</div>
+    {% endif %}
+  </section>
+
+  {# --------------------------------------------- Super Admin override #}
+  {% if can_override %}
+  <section class="card inline-section" id="override">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0; color: var(--danger);">
+      <i class="bi bi-exclamation-octagon"></i> Super Admin emergency override
+    </h2>
+    <div class="notice notice-danger">
+      <i class="bi bi-shield-exclamation"></i>
+      <span>
+        This forces a lifecycle transition without waiting for a second approver.
+        It is <strong>irreversible in the audit trail</strong>: the before/after
+        state, the superseded four-eyes control and the documented reason are all
+        recorded permanently. Use only for genuine emergencies.
+      </span>
+    </div>
+    <div class="add-box" style="max-width: 620px;">
+      <h3><i class="bi bi-lightning-charge"></i> Force a transition</h3>
+      <form method="post" action="{% url 'election_override' election.pk %}" class="add-form"
+            onsubmit="return confirm('Apply the emergency override? This bypasses the normal approval procedure and is recorded in the audit chain.');">
+        {% csrf_token %}
+        {{ override_form.as_div }}
+        <div><button class="btn btn-sm btn-danger" type="submit"><i class="bi bi-exclamation-octagon"></i> Apply override</button></div>
+      </form>
+    </div>
+  </section>
+
+  {# --------------------------------------------- Super Admin deletion #}
+  <section class="card inline-section" id="election-delete">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0; color: var(--danger);">
+      <i class="bi bi-trash"></i> Permanent deletion (Super Admin only)
+    </h2>
+    <div class="notice notice-danger">
+      <i class="bi bi-shield-exclamation"></i>
+      <span>
+        This permanently deletes the election and its related records (positions, candidates, voters, ballot authorizations/preparations/ballots/box, tally snapshots, representatives/attendance/incidents, approvals, polling stations).
+        The audit chain for this election (<code>election:{{ election.pk }}</code>) is <strong>preserved</strong> for integrity verification even though the election row is removed.
+        This action <strong>cannot be undone</strong>. Use only as a break-glass measure with explicit confirmation.
+      </span>
+    </div>
+    <div class="add-box" style="max-width: 620px;">
+      <h3><i class="bi bi-exclamation-triangle"></i> Delete this election permanently</h3>
+      <a class="btn btn-sm btn-danger" href="{% url 'election_delete' election.pk %}">
+        <i class="bi bi-trash"></i> Go to deletion confirmation
+      </a>
+    </div>
+  </section>
+  {% endif %}
 </div>
+
+<script>
+/* Live preview of the passport photograph chosen in each "add candidate"
+   box. Uses URL.createObjectURL (no server round-trip); the image is still
+   validated server-side on submit. */
+(function () {
+  'use strict';
+  document.querySelectorAll('form.add-form').forEach(function (form) {
+    var input = form.querySelector('[data-photo-input]');
+    if (!input) return;
+    var box = form.querySelector('[data-photo-preview]');
+    if (!box) return;
+    var img = box.querySelector('[data-photo-preview-img]');
+    var nameEl = box.querySelector('[data-photo-preview-name]');
+    var currentUrl = null;
+    input.addEventListener('change', function () {
+      var file = input.files && input.files[0];
+      if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+      if (!file) { box.classList.remove('visible'); return; }
+      currentUrl = URL.createObjectURL(file);
+      img.src = currentUrl;
+      if (nameEl) nameEl.textContent = file.name;
+      box.classList.add('visible');
+    });
+  });
+})();
+</script>
 {% endblock %}

@@ -13,10 +13,14 @@ Evolution notes (see docs/ARCHITECTURE.md):
 """
 
 import uuid
+from pathlib import Path
 
 from django.conf import settings
+from django.core.files.uploadedfile import UploadedFile
 from django.db import models
 from django.utils import timezone
+
+from .photos import validate_candidate_photo
 
 
 class Election(models.Model):
@@ -112,6 +116,26 @@ class Election(models.Model):
     allow_blank = models.BooleanField(default=True)
     eligibility_units = models.JSONField(default=list, blank=True)  # [] = all units
     rules = models.JSONField(default=dict, blank=True)
+
+    # Voter token configuration
+    TOKEN_FORMAT_NUMERIC = "numeric"
+    TOKEN_FORMAT_ALPHANUMERIC = "alphanumeric"
+    TOKEN_FORMAT_CHOICES = [
+        (TOKEN_FORMAT_NUMERIC, "Numeric (6 digits, leading zeros preserved)"),
+        (TOKEN_FORMAT_ALPHANUMERIC, "Alphanumeric (6 characters, A-Z, 0-9)"),
+    ]
+    token_format = models.CharField(
+        max_length=16,
+        choices=TOKEN_FORMAT_CHOICES,
+        default=TOKEN_FORMAT_ALPHANUMERIC,
+        blank=True,
+        help_text="Format of voter access tokens for this election.",
+    )
+    token_expiry_hours = models.PositiveIntegerField(
+        default=168,  # 7 days
+        blank=True,
+        help_text="Hours after issuance until tokens expire (0 = no expiry).",
+    )
 
     # Legacy switches kept for existing data / simple public listing
     is_published = models.BooleanField(default=False)  # publicly listed
@@ -292,6 +316,32 @@ class ElectionApproval(models.Model):
         return f"{self.get_kind_display()} · {self.election} ({self.status})"
 
 
+# The namespaced path prefix (``elections/<uuid>/candidates/<uuid>/``) is 94
+# characters long.  Uploaded names are capped so that the prefix, the name and
+# the collision suffix Django appends (``_XXXXXXX``) always stay comfortably
+# inside ``Candidate.photo``'s ``max_length``.
+PHOTO_NAME_MAX_STEM = 80
+
+
+def candidate_photo_path(instance: "Candidate", filename: str) -> str:
+    """Storage path for a candidate's passport photograph.
+
+    Photos are namespaced by election and candidate primary key so that
+    replacing or deleting a candidate can never collide with another
+    candidate's stored photograph, and the file tree mirrors the data model
+    (``elections/<election>/candidates/<candidate>/<file>``).
+    """
+    election_id = (
+        instance.position.election_id if instance.position_id else "unassigned"
+    ) or "unassigned"
+    candidate_id = instance.pk or "new"
+    safe_name = Path(filename or "photo.jpg").name or "photo.jpg"
+    stem, suffix = Path(safe_name).stem, Path(safe_name).suffix
+    if len(stem) > PHOTO_NAME_MAX_STEM:
+        safe_name = f"{stem[:PHOTO_NAME_MAX_STEM]}{suffix}"
+    return f"elections/{election_id}/candidates/{candidate_id}/{safe_name}"
+
+
 class Candidate(models.Model):
     STATUS_DRAFT = "draft"
     STATUS_NOMINATED = "nominated"
@@ -311,7 +361,9 @@ class Candidate(models.Model):
     full_name = models.CharField(max_length=255)
     bio = models.TextField(blank=True)
     manifesto = models.TextField(blank=True, default="")
-    photo = models.ImageField(upload_to="candidates/", null=True, blank=True)
+    photo = models.ImageField(
+        upload_to=candidate_photo_path, null=True, blank=True, max_length=255
+    )
     order = models.IntegerField(default=0)
     status = models.CharField(
         max_length=16, choices=STATUS_CHOICES, default=STATUS_APPROVED, db_index=True
@@ -324,6 +376,26 @@ class Candidate(models.Model):
     @property
     def is_on_ballot(self) -> bool:
         return self.status == self.STATUS_APPROVED
+
+    @property
+    def initials(self) -> str:
+        """Up-to-two-letter initials used when no photograph is available.
+
+        This drives the neutral initials placeholder shown on the ballot and
+        in management screens — never a stock photograph or a broken image
+        icon.
+        """
+        words = [w for w in (self.full_name or "").split() if w]
+        return "".join(w[0].upper() for w in words[:2]) or "–"
+
+    def clean(self) -> None:
+        super().clean()
+        # Validate freshly uploaded passport photographs (a Django
+        # InMemoryUploadedFile / TemporaryUploadedFile). Already-stored photos
+        # (plain FieldFile values on existing candidates) are not re-decoded;
+        # they were validated on upload.
+        if isinstance(self.photo, UploadedFile):
+            validate_candidate_photo(self.photo)
 
     def __str__(self) -> str:
         return self.full_name
@@ -400,3 +472,97 @@ class Voter(models.Model):
 # converted to sealed ballots (ballot/0002) and hash-chained audit events
 # (audit/0002).
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Workstation registration & access mode (kiosk device identity)
+# ---------------------------------------------------------------------------
+
+
+class Workstation(models.Model):
+    """A registered voting/verification workstation (managed device)."""
+
+    PURPOSE_VOTING = "voting"
+    PURPOSE_VERIFICATION = "verification"
+    PURPOSE_CHOICES = [
+        (PURPOSE_VOTING, "Voting (kiosk)"),
+        (PURPOSE_VERIFICATION, "Verification (officer)"),
+    ]
+
+    STATUS_ACTIVE = "active"
+    STATUS_DISABLED = "disabled"
+    STATUS_REVOKED = "revoked"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_DISABLED, "Disabled"),
+        (STATUS_REVOKED, "Revoked"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=64, unique=True, db_index=True)
+    election = models.ForeignKey(
+        "Election", null=True, blank=True, related_name="workstations",
+        on_delete=models.SET_NULL,
+    )
+    polling_station = models.ForeignKey(
+        "PollingStation", null=True, blank=True, related_name="workstations",
+        on_delete=models.SET_NULL,
+    )
+    purpose = models.CharField(
+        max_length=20, choices=PURPOSE_CHOICES, default=PURPOSE_VOTING, db_index=True
+    )
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_ACTIVE, db_index=True
+    )
+    credential_hash = models.CharField(max_length=255, blank=True, default="")
+    credential_rotated_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, related_name="+",
+        on_delete=models.SET_NULL,
+    )
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "code"]
+        constraints = [
+            models.UniqueConstraint(fields=["code"], name="uniq_workstation_code"),
+        ]
+        indexes = [
+            models.Index(fields=["purpose", "status"]),
+            models.Index(fields=["election", "purpose"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.code}) [{self.purpose}/{self.status}]"
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == self.STATUS_ACTIVE
+
+    def set_credential(self, raw: str) -> None:
+        from django.contrib.auth.hashers import make_password
+
+        self.credential_hash = make_password(raw)
+        self.credential_rotated_at = timezone.now()
+
+    def check_credential(self, raw: str) -> bool:
+        from django.contrib.auth.hashers import check_password
+
+        if not self.credential_hash or not raw:
+            return False
+        try:
+            return check_password(raw, self.credential_hash)
+        except Exception:
+            return False
+
+    def activate(self) -> None:
+        self.status = self.STATUS_ACTIVE
+
+    def disable(self) -> None:
+        self.status = self.STATUS_DISABLED
+
+    def revoke(self) -> None:
+        self.status = self.STATUS_REVOKED

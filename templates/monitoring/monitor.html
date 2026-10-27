@@ -1,52 +1,214 @@
 {% extends "base.html" %}
 {% block title %}Live monitor · {{ election.title }}{% endblock %}
 {% block content %}
+<style>
+  /* ---- Live monitor ---- */
+  .monitor-head { display: flex; flex-direction: column; gap: 0.55rem; }
+
+  .live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #047857;
+    background: var(--success-bg);
+    border: 1px solid #bbf7d0;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+  }
+  .live-pill .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .live-pill .dot::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid #10b981;
+    animation: live-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes live-ping { 75%, 100% { transform: scale(2); opacity: 0; } }
+
+  .monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.9rem;
+  }
+  .monitor-tile {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1.05rem 1.15rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+  .monitor-tile .mv {
+    font-size: 1.55rem;
+    font-weight: 750;
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+  }
+  .monitor-tile .ml { font-size: 0.74rem; font-weight: 650; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem; }
+  .monitor-tile .ml i { color: var(--primary); font-size: 0.9rem; }
+  .monitor-tile.turnout { grid-column: span 2; background: linear-gradient(160deg, var(--primary-light) 0%, #fff 75%); border-color: #c7d2fe; }
+  .monitor-tile.turnout .mv { color: var(--primary-dark); }
+  .monitor-tile .turnout-bar { margin-top: 0.5rem; }
+  .monitor-tile .hidden-turnout { color: var(--warning); font-weight: 650; font-size: 0.9rem; display: flex; align-items: center; gap: 0.45rem; }
+
+  .status-online { color: var(--success); font-weight: 650; }
+  .status-offline { color: var(--text-tertiary); }
+  .status-other { color: var(--text-secondary); }
+
+  .updated-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+    font-weight: 550;
+  }
+  .updated-row i { color: var(--primary); }
+
+  @media (max-width: 560px) {
+    .monitor-tile.turnout { grid-column: span 2; }
+  }
+</style>
+
 <div class="admin-content">
-  <h1>Live monitor — {{ election.title }}</h1>
-  <p><span class="badge {{ election.state_badge }}" id="state-badge">{{ election.get_state_display }}</span>
-     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a></p>
-  <p class="hint">Aggregate data only (turnout, box counter, station and incident
-    status). Refreshes every 5 seconds; no ballot contents are ever loaded here.</p>
+  <div class="monitor-head page-head">
+    <div class="page-head-row">
+      <h1>Live Monitor — {{ election.title }}</h1>
+      <span class="live-pill"><span class="dot"></span> Live</span>
+    </div>
+    <div class="meta-row">
+      <span class="badge {% if election.state_badge %}{{ election.state_badge }}{% else %}badge-closed{% endif %}" id="state-badge">{{ election.get_state_display }}</span>
+      {% if board_available %}
+        <a class="btn btn-sm btn-primary" href="{{ board_url }}" target="_blank" rel="noopener noreferrer">
+          <i class="bi bi-easel2"></i> Open results board
+        </a>
+      {% endif %}
+      <a href="{% url 'election_config' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to configuration</a>
+    </div>
+    <p class="hint">Aggregate data only (turnout, box counter, station and incident status). Refreshes every 5 seconds; no ballot contents are ever loaded here.</p>
+    <div class="updated-row"><i class="bi bi-arrow-repeat"></i> <span id="lastUpdated">connecting…</span></div>
+  </div>
 
   <section class="card inline-section">
-    <h2>Status</h2>
-    <p class="stat" id="turnout">…</p>
-    <p>Ballot box sequence: <strong id="box-seq">…</strong></p>
-    <p>Open incidents: <strong id="incidents">…</strong> ·
-       Approved representatives: <strong id="reps">…</strong> ·
-       Pending: <strong id="reps-pending">…</strong></p>
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-activity" style="color: var(--primary);"></i> Status</h2>
+    <div class="monitor-grid" id="monitorGrid">
+      <div class="monitor-tile turnout" id="turnout">
+        <span class="mv">…</span>
+        <span class="ml"><i class="bi bi-people"></i> Turnout</span>
+      </div>
+      <div class="monitor-tile">
+        <span class="mv" id="box-seq">…</span>
+        <span class="ml"><i class="bi bi-upc"></i> Ballot box sequence</span>
+      </div>
+      <div class="monitor-tile">
+        <span class="mv" id="incidents">…</span>
+        <span class="ml"><i class="bi bi-exclamation-triangle"></i> Open incidents</span>
+      </div>
+      <div class="monitor-tile">
+        <span class="mv" id="reps">…</span>
+        <span class="ml"><i class="bi bi-person-check"></i> Approved reps</span>
+      </div>
+      <div class="monitor-tile">
+        <span class="mv" id="reps-pending">…</span>
+        <span class="ml"><i class="bi bi-hourglass-split"></i> Pending reps</span>
+      </div>
+    </div>
   </section>
 
   <section class="card inline-section">
-    <h2>Stations</h2>
-    <table>
-      <thead><tr><th>Station</th><th>Status</th><th>Ballots</th></tr></thead>
-      <tbody id="stations"><tr><td colspan="3">loading…</td></tr></tbody>
-    </table>
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-building" style="color: var(--primary);"></i> Polling Stations</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Station</th><th>Status</th><th style="text-align: right;">Ballots</th><th style="width: 34%;">Share</th></tr></thead>
+        <tbody id="stations"><tr><td colspan="4">loading…</td></tr></tbody>
+      </table>
+    </div>
   </section>
 </div>
 {% endblock %}
+
 {% block extra_js %}
 <script>
 const url = "{{ live_url }}";
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (ch) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+  });
+}
+
+function statusChip(status) {
+  var s = String(status || "").toLowerCase();
+  var cls = s.indexOf("open") !== -1 || s.indexOf("online") !== -1 || s.indexOf("active") !== -1
+    ? "badge-open" : (s.indexOf("closed") !== -1 || s.indexOf("offline") !== -1 ? "badge-closed" : "badge-category");
+  return '<span class="badge ' + cls + '">' + esc(status) + "</span>";
+}
+
 function refresh() {
   fetch(url, {headers: {"Accept": "application/json"}})
     .then(r => r.json())
     .then(d => {
-      document.getElementById("state-badge").textContent = d.state.toUpperCase();
+      const badgeEl = document.getElementById("state-badge");
+      badgeEl.textContent = d.state.toUpperCase();
+
       const t = d.turnout;
-      document.getElementById("turnout").textContent =
-        (t.total === null) ? "Turnout hidden while voting is open"
-          : `${t.voted} / ${t.total} voted (${t.percent}%)`;
+      const turnoutEl = document.getElementById("turnout");
+      if (t.total === null) {
+        turnoutEl.innerHTML =
+          '<span class="hidden-turnout"><i class="bi bi-eye-slash"></i> Hidden while voting is open</span>' +
+          '<span class="ml"><i class="bi bi-people"></i> Turnout</span>';
+      } else {
+        const pctNum = Number(t.percent) || 0;
+        turnoutEl.innerHTML =
+          '<span class="mv">' + t.voted + " / " + t.total + "</span>" +
+          '<span class="ml"><i class="bi bi-people"></i> ' + pctNum.toFixed(1) + "% voted</span>" +
+          '<div class="bar turnout-bar"><div class="fill" style="width: ' + Math.min(pctNum, 100) + '%"></div></div>';
+      }
+
       document.getElementById("box-seq").textContent = d.ballot_box.last_seq;
       document.getElementById("incidents").textContent = d.incidents_open;
       document.getElementById("reps").textContent = d.representatives.approved;
       document.getElementById("reps-pending").textContent = d.representatives.pending;
-      document.getElementById("stations").innerHTML = d.stations.length
-        ? d.stations.map(s => `<tr><td>${s.name}</td><td>${s.status}</td><td>${s.ballots}</td></tr>`).join("")
-        : '<tr><td colspan="3">No stations configured.</td></tr>';
+
+      const stationsBody = document.getElementById("stations");
+      const maxBallots = d.stations.reduce((m, s) => Math.max(m, Number(s.ballots) || 0), 0);
+      stationsBody.innerHTML = d.stations.length
+        ? d.stations.map(s => {
+            const ballots = Number(s.ballots) || 0;
+            const share = maxBallots > 0 ? Math.round((ballots / maxBallots) * 100) : 0;
+            return "<tr>" +
+              "<td><strong>" + esc(s.name) + "</strong></td>" +
+              "<td>" + statusChip(s.status) + "</td>" +
+              '<td style="text-align: right; font-weight: 650;">' + ballots + "</td>" +
+              '<td><div class="bar"><div class="fill" style="width: ' + share + '%"></div></div></td>' +
+              "</tr>";
+          }).join("")
+        : '<tr><td colspan="4"><span class="hint">No stations configured.</span></td></tr>';
+
+      const upd = document.getElementById("lastUpdated");
+      if (upd) upd.textContent = "Last updated " + new Date().toLocaleTimeString();
     })
-    .catch(() => {});
+    .catch(() => {
+      const upd = document.getElementById("lastUpdated");
+      if (upd) upd.textContent = "Connection lost — retrying…";
+    });
 }
 refresh();
 setInterval(refresh, 5000);

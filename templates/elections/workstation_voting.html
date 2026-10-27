@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Voting workstation{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Voting workstation (kiosk)</h1>
+  <p>Device: {{ workstation.name }} ({{ workstation.code }})</p>
+  <p class="hint">This is the <strong>kiosk screen</strong> shown to voters on this device. Only registered, active VOTING workstations may operate in polling-station mode.</p>
+  <p class="hint">Voters cast ballots using the token issued for this election; direct them to the ballot URL printed on their credential. {% if workstation.election %}<a class="btn btn-primary btn-sm" href="{% url 'voter_login' workstation.election.pk %}">Open voter login</a>{% endif %} {% if user.is_superuser %}To manage devices, use <a href="{% url 'workstation-manage' %}">Workstation management</a>.{% endif %}</p>
+  <form method="post" action="{% url 'workstation-logout' %}">{% csrf_token %}<button type="submit">Log out workstation</button></form>
+</div>
+{% endblock %}

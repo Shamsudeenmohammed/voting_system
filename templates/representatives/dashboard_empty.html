@@ -1,13 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Representative dashboard{% endblock %}
 {% block content %}
+<style>
+  /* ---- Empty representative dashboard ---- */
+  .empty-hero-icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.9rem;
+    background: linear-gradient(160deg, var(--primary-light) 0%, #e0e7ff 100%);
+    color: var(--primary);
+    border: 1px solid #c7d2fe;
+  }
+</style>
+
 <div class="login-page">
-  <div class="login-card">
-    <h1>No active assignment</h1>
+  <div class="login-card" style="text-align: center;">
+    <div class="empty-hero-icon"><i class="bi bi-person-x"></i></div>
+    <h1 style="font-size: 1.3rem;">No active assignment</h1>
     <p class="hint">You are not an approved representative for any election.
       Apply through your candidate's election page, or wait for your application
       to be approved.</p>
-    <a class="btn btn-outline" href="{% url 'home' %}">Back to elections</a>
+    <a class="btn btn-outline btn-block" href="{% url 'home' %}"><i class="bi bi-arrow-left"></i> Back to elections</a>
   </div>
 </div>
 {% endblock %}

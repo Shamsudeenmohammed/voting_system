@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}System settings · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- System settings (read-only) ---- */
+  .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.35rem; align-items: start; }
+  .settings-card { display: flex; flex-direction: column; gap: 0.35rem; }
+  .settings-card > h2 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+  }
+  .settings-card > h2 i { color: var(--primary); }
+  .setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px dashed var(--border-color);
+    font-size: 0.85rem;
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row .k { color: var(--text-tertiary); }
+  .setting-row .v { font-weight: 600; color: var(--text-primary); text-align: right; }
+  .onoff { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 650; }
+  .onoff.on { color: var(--success); }
+  .onoff.off { color: var(--danger); }
+  .onoff.muted { color: var(--text-muted); }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>System settings</h1>
+    <p class="sub">
+      A read-only view of the deployment's security-relevant configuration.
+      Secrets (keys, peppers) are never shown — only whether they are set, so you
+      can confirm the platform is correctly hardened. Most values come from
+      environment variables and require a restart to change.
+    </p>
+  </div>
+
+  <div class="settings-grid">
+    <section class="card settings-card">
+      <h2><i class="bi bi-sliders2"></i> Platform</h2>
+      <div class="setting-row"><span class="k">Django version</span><span class="v">{{ config.django_version }}</span></div>
+      <div class="setting-row"><span class="k">Debug mode</span>
+        <span class="v">{% if config.debug %}<span class="onoff off"><i class="bi bi-bug"></i> On (development)</span>{% else %}<span class="onoff on"><i class="bi bi-shield-check"></i> Off</span>{% endif %}</span>
+      </div>
+      <div class="setting-row"><span class="k">Time zone</span><span class="v">{{ config.time_zone }}</span></div>
+      <div class="setting-row"><span class="k">Language</span><span class="v">{{ config.language }}</span></div>
+    </section>
+
+    <section class="card settings-card">
+      <h2><i class="bi bi-shield-lock"></i> Cryptography</h2>
+      <div class="setting-row"><span class="k">Result signing algorithm</span><span class="v">{{ config.signing_algorithm }}</span></div>
+      <div class="setting-row"><span class="k">Ballot encryption key</span>
+        <span class="v">{% if config.ballot_key_configured %}<span class="onoff on"><i class="bi bi-check-circle"></i> Configured</span>{% else %}<span class="onoff off"><i class="bi bi-exclamation-triangle"></i> Not set</span>{% endif %}</span>
+      </div>
+      <div class="setting-row"><span class="k">Result signing key</span>
+        <span class="v">{% if config.result_key_configured %}<span class="onoff on"><i class="bi bi-check-circle"></i> Configured</span>{% else %}<span class="onoff off"><i class="bi bi-exclamation-triangle"></i> Not set</span>{% endif %}</span>
+      </div>
+      <div class="setting-row"><span class="k">Voter-token pepper</span>
+        <span class="v">{% if config.token_pepper_configured %}<span class="onoff on"><i class="bi bi-check-circle"></i> Configured</span>{% else %}<span class="onoff off"><i class="bi bi-exclamation-triangle"></i> Not set</span>{% endif %}</span>
+      </div>
+    </section>
+
+    <section class="card settings-card">
+      <h2><i class="bi bi-person-lock"></i> Sessions &amp; transport</h2>
+      <div class="setting-row"><span class="k">Session lifetime</span><span class="v">{{ config.session_age_hours }} h</span></div>
+      <div class="setting-row"><span class="k">Expire on browser close</span>
+        <span class="v">{% if config.session_browser_close %}<span class="onoff on"><i class="bi bi-check-circle"></i> Yes</span>{% else %}<span class="onoff muted">No</span>{% endif %}</span>
+      </div>
+      <div class="setting-row"><span class="k">Session cookie HttpOnly</span>
+        <span class="v">{% if config.session_httponly %}<span class="onoff on"><i class="bi bi-check-circle"></i> Yes</span>{% else %}<span class="onoff off">No</span>{% endif %}</span>
+      </div>
+      <div class="setting-row"><span class="k">CSRF cookie SameSite</span><span class="v">{{ config.csrf_samesite }}</span></div>
+      <div class="setting-row"><span class="k">X-Frame-Options</span><span class="v">{{ config.x_frame_options|default:"—" }}</span></div>
+      <div class="setting-row"><span class="k">Content-type nosniff</span>
+        <span class="v">{% if config.content_type_nosniff %}<span class="onoff on"><i class="bi bi-check-circle"></i> On</span>{% else %}<span class="onoff off">Off</span>{% endif %}</span>
+      </div>
+      <div class="setting-row"><span class="k">Referrer policy</span><span class="v">{{ config.referrer_policy|default:"—" }}</span></div>
+    </section>
+
+    <section class="card settings-card">
+      <h2><i class="bi bi-speedometer"></i> Rate limits</h2>
+      <div class="setting-row"><span class="k">Window</span><span class="v">{{ config.rate_limits.window_seconds }} s</span></div>
+      <div class="setting-row"><span class="k">Voter login</span><span class="v">{{ config.rate_limits.voter_login }} / window</span></div>
+      <div class="setting-row"><span class="k">Ballot cast</span><span class="v">{{ config.rate_limits.ballot_cast }} / window</span></div>
+      <div class="setting-row"><span class="k">Report download</span><span class="v">{{ config.rate_limits.report_download }} / window</span></div>
+      <div class="setting-row"><span class="k">Task queue</span>
+        <span class="v">{% if config.celery_eager %}<span class="onoff muted"><i class="bi bi-lightning-charge"></i> In-process (eager)</span>{% else %}<span class="onoff on"><i class="bi bi-hdd-network"></i> Broker</span>{% endif %}</span>
+      </div>
+    </section>
+
+    <section class="card settings-card">
+      <h2><i class="bi bi-database"></i> Platform data</h2>
+      <div class="setting-row"><span class="k">Organizations</span><span class="v">{{ counts.organizations }} ({{ counts.active_organizations }} active)</span></div>
+      <div class="setting-row"><span class="k">Users</span><span class="v">{{ counts.users }} ({{ counts.staff_users }} staff)</span></div>
+      <div class="setting-row"><span class="k">Role memberships</span><span class="v">{{ counts.memberships }}</span></div>
+      <div class="setting-row"><span class="k">Elections</span><span class="v">{{ counts.elections }}</span></div>
+    </section>
+
+    <section class="card settings-card">
+      <h2><i class="bi bi-box-arrow-up-right"></i> Administration</h2>
+      <div class="action-links" style="flex-direction: column; align-items: stretch;">
+        <a class="btn btn-outline btn-sm" href="{% url 'manage_organizations' %}"><i class="bi bi-buildings"></i> Organizations</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'manage_people' %}"><i class="bi bi-people"></i> People &amp; access</a>
+        <a class="btn btn-outline btn-sm" href="/watch/"><i class="bi bi-gear"></i> Django admin</a>
+      </div>
+      <p class="hint" style="margin: 0.65rem 0 0;">The Django admin is a low-level maintenance surface. Use the console pages above for day-to-day work so every change is audited.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}

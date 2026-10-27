@@ -12,6 +12,7 @@ Notes:
 
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .config import invalidate_config_cache
@@ -52,6 +53,13 @@ class ElectionAdmin(admin.ModelAdmin):
         "reopened_count", "created_at", "created_by",
     ]
 
+    def get_readonly_fields(self, request, obj=None):
+        # Super admins may edit the lifecycle state directly (escape hatch).
+        fields = list(self.readonly_fields)
+        if request.user.is_superuser and "state" in fields:
+            fields.remove("state")
+        return fields
+
     fieldsets = [
         (None, {"fields": ["organization", "title", "description", "category"]}),
         ("Configuration", {"fields": ["ballot_type", "start_at", "end_at", "allow_blank"]}),
@@ -81,12 +89,20 @@ class ElectionAdmin(admin.ModelAdmin):
         return f"{v}/{t} ({pct:.0f}%)"
 
     def save_model(self, request, obj, form, change):
-        if obj.frozen and change:
-            # No editing of a frozen election through the raw admin.
+        # Frozen elections are immutable through the raw admin for ordinary
+        # staff, but super admins are allowed to update them directly.
+        if obj.frozen and change and not request.user.is_superuser:
             raise PermissionDenied(
                 "This election's configuration is frozen; use the audited "
                 "correction procedure instead."
             )
+        if change and request.user.is_superuser:
+            try:
+                previous = Election.objects.get(pk=obj.pk)
+            except Election.DoesNotExist:
+                previous = None
+            if previous is not None and previous.state != obj.state:
+                obj.state_updated_at = timezone.now()
         invalidate_config_cache(obj)
         super().save_model(request, obj, form, change)
 
@@ -109,13 +125,13 @@ class PositionAdmin(admin.ModelAdmin):
     candidate_count.short_description = "Candidates"
 
     def save_model(self, request, obj, form, change):
-        if obj.election.frozen:
+        if obj.election.frozen and not request.user.is_superuser:
             raise PermissionDenied("Configuration is frozen for this election.")
         super().save_model(request, obj, form, change)
         invalidate_config_cache(obj.election)
 
     def delete_model(self, request, obj):
-        if obj.election.frozen:
+        if obj.election.frozen and not request.user.is_superuser:
             raise PermissionDenied("Configuration is frozen for this election.")
         election = obj.election
         super().delete_model(request, obj)
@@ -124,22 +140,56 @@ class PositionAdmin(admin.ModelAdmin):
 
 @admin.register(Candidate)
 class CandidateAdmin(admin.ModelAdmin):
-    list_display = ["full_name", "position", "election", "status"]
+    list_display = ["photo_thumbnail", "full_name", "position", "election", "status"]
     list_filter = ["status", "position__election"]
     search_fields = ["full_name"]
-    readonly_fields = ["approved_at"]
+    readonly_fields = ["approved_at", "photo_preview"]
+    fields = ["photo_preview", "photo", "position", "full_name", "bio", "manifesto", "order", "status", "approved_at"]
 
+    @admin.display(description="Election")
     def election(self, obj):
         return obj.position.election
 
+    @admin.display(description="Photo")
+    def photo_thumbnail(self, obj):
+        """Small passport-photo thumbnail in the candidate list."""
+        if obj.photo:
+            return format_html(
+                '<img src="{}" alt="Photograph of {}" '
+                'style="width:44px;height:56px;object-fit:cover;border-radius:4px;'
+                'border:1px solid var(--border, #e2e8f0);" />',
+                obj.photo.url,
+                obj.full_name,
+            )
+        return format_html(
+            '<span title="No passport photograph" '
+            'style="display:inline-flex;width:44px;height:56px;align-items:center;'
+            'justify-content:center;border-radius:4px;background:#eef2ff;'
+            'color:#4338ca;font-weight:600;font-size:13px;">{}</span>',
+            obj.initials,
+        )
+
+    @admin.display(description="Passport photograph")
+    def photo_preview(self, obj):
+        """Large preview on the candidate detail/change page."""
+        if obj.pk and obj.photo:
+            return format_html(
+                '<img src="{}" alt="Photograph of {}" '
+                'style="max-width:240px;max-height:300px;object-fit:cover;'
+                'border-radius:8px;border:1px solid var(--border, #e2e8f0);" />',
+                obj.photo.url,
+                obj.full_name,
+            )
+        return "No passport photograph uploaded yet."
+
     def save_model(self, request, obj, form, change):
-        if obj.position.election.frozen:
+        if obj.position.election.frozen and not request.user.is_superuser:
             raise PermissionDenied("Configuration is frozen for this election.")
         super().save_model(request, obj, form, change)
         invalidate_config_cache(obj.position.election)
 
     def delete_model(self, request, obj):
-        if obj.position.election.frozen:
+        if obj.position.election.frozen and not request.user.is_superuser:
             raise PermissionDenied("Configuration is frozen for this election.")
         election = obj.position.election
         super().delete_model(request, obj)
@@ -182,3 +232,6 @@ class ElectionApprovalAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+import elections.admin_workstation  # noqa: F401
+

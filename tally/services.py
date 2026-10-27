@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from typing import Any
 
 from django.db import transaction
@@ -253,6 +254,59 @@ def compute_snapshot(election_id, *, actor=None, reason: str = ""):
             },
         )
     return snapshot
+
+
+LIVE_COUNT_TTL = 15  # seconds; new ballots change the cache key immediately
+
+
+def live_count(election):
+    """Aggregate live count for projection/monitoring surfaces.
+
+    This deliberately does **not** create a tally snapshot: it is an
+    uncertified, read-only view of the sealed ballots.  The result contains
+    only per-candidate totals and reconciliation counters - never ballot
+    payloads, receipt codes or voter identity.
+
+    The cache key includes the ballot-box sequence, so a new accepted ballot
+    invalidates the result immediately even before the short TTL expires.
+    ``cache.get``/``set`` failures are ignored: a cold cache only costs a
+    recomputation, it must never break the board.
+    """
+    from django.core.cache import cache
+    from django.db.models import Max
+
+    from ballot.models import Ballot, BallotBox
+
+    seq = (
+        BallotBox.objects.filter(election_id=election.pk)
+        .values_list("last_seq", flat=True)
+        .first()
+        or 0
+    )
+    key = f"live-count:{election.pk}:{election.config_hash or 'unfrozen'}:{seq}"
+    try:
+        cached = cache.get(key)
+    except Exception:  # pragma: no cover - cache backend outage guard
+        cached = None
+    if cached is not None:
+        return cached
+
+    started = time.perf_counter()
+    payload, _stats = _count(election)
+    last_ballot_at = (
+        Ballot.objects.filter(election_id=election.pk)
+        .aggregate(last=Max("accepted_at"))["last"]
+    )
+    payload["live"] = {
+        "generated_at": timezone.now().isoformat(),
+        "count_ms": max(0, int((time.perf_counter() - started) * 1000)),
+        "last_ballot_at": last_ballot_at.isoformat() if last_ballot_at else None,
+    }
+    try:
+        cache.set(key, payload, LIVE_COUNT_TTL)
+    except Exception:  # pragma: no cover - cache backend outage guard
+        pass
+    return payload
 
 
 def latest_snapshot(election):

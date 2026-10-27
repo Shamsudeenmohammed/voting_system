@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Polling Officer — {{ election.title }}{% endblock %}
+{% block content %}
+<style>
+  .po-wrap { max-width: 720px; margin: 0 auto; }
+  .po-card { padding: 1.5rem; overflow: visible; max-height: none; }
+  .po-result { margin-top: 1rem; padding: 1rem; border-radius: 12px; }
+  .po-token { font-family: monospace; font-size: 1.5rem; letter-spacing: 0.2em; text-align: center; padding: 0.75rem; background: #eef2ff; border-radius: 8px; }
+  .po-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1rem; }
+  .po-details dt { font-weight: 600; color: #475569; }
+</style>
+<div class="admin-content po-wrap">
+  <div class="card po-card">
+    <h1>Polling Officer — Issue Voting Token</h1>
+    <p class="hint">{{ election.title }}</p>
+    <form method="post" style="display:flex; gap:0.75rem; margin-top:1rem;">
+      {% csrf_token %}
+      <input class="input" type="text" name="voter_id" value="{{ voter_id }}" placeholder="Enter voter ID" autofocus required style="flex:1;">
+      <button class="btn btn-primary" type="submit">Check &amp; Issue</button>
+    </form>
+
+    {% if result %}
+      <div class="po-result">
+        {% if result.status == "issued" or result.status == "reissued" %}
+          <div class="message success"><i class="bi bi-check-circle"></i><span>{{ result.message }}</span></div>
+          {% if result.voter %}
+            <dl class="po-details">
+              <dt>Voter ID</dt><dd>{{ result.voter.voter_id }}</dd>
+              <dt>Name</dt><dd>{{ result.voter.full_name|default:"—" }}</dd>
+              <dt>Status</dt><dd>{{ result.voter.status }}</dd>
+              <dt>Unit</dt><dd>{{ result.voter.organization_unit|default:"—" }}</dd>
+            </dl>
+          {% endif %}
+          <div class="po-token" style="margin-top:1rem;">{{ result.token }}</div>
+          <p class="hint" style="text-align:center;">Write this token down for the voter. It is shown once.</p>
+        {% elif result.status == "already_voted" %}
+          <div class="message error"><i class="bi bi-x-circle"></i><span>This voter has already cast their vote. No new token can be issued.</span></div>
+        {% elif result.status == "active_token" %}
+          <div class="message warning"><i class="bi bi-exclamation-triangle"></i><span>A valid voting token is already active for this voter. No duplicate token generated.</span></div>
+        {% else %}
+          <div class="message error"><i class="bi bi-x-circle"></i><span>{{ result.message }}</span></div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

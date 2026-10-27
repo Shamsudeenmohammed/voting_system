@@ -7,17 +7,24 @@ and result visibility.
 """
 from __future__ import annotations
 
+import shutil
+import tempfile
+from io import BytesIO
+
 from django.contrib.messages import get_messages
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from django.utils.html import escape
+from PIL import Image
 
 from audit.models import AuditCheckpoint
 from ballot.models import Ballot
 from ballot.services import cast_ballot, issue_authorization, prepare_ballot
 
 from .lifecycle import transition
-from .models import Election, ElectionApproval
+from .models import Candidate, Election, ElectionApproval, Position
 from .tests import BaseVotingTestCase
 
 
@@ -26,11 +33,10 @@ class PublicPageTests(BaseVotingTestCase):
         self.election, self.position, self.candidates = self.open_election(with_voters=3)
         self.draft = self.make_election(title="Draft Election")
 
-    def test_home_lists_only_public_elections(self):
+    def test_home_redirects_to_login_for_anonymous(self):
         r = self.client.get(reverse("home"))
-        self.assertEqual(r.status_code, 200)
-        self.assertContains(r, escape(self.election.title))
-        self.assertNotContains(r, "Draft Election")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r["Location"])
 
     def test_detail_is_public_for_open_election(self):
         r = self.client.get(reverse("election_detail", args=[self.election.pk]))
@@ -90,7 +96,7 @@ class BallotFlowHttpTests(BaseVotingTestCase):
 
     def test_full_ballot_round_trip(self):
         voter = self.election.voters.first()
-        _auth, token = issue_authorization(voter)
+        _auth, token = issue_authorization(voter, allow_reissue=True, reason="test")
         url = reverse("ballot_prepare", args=[token])
 
         r = self.client.get(url)
@@ -130,9 +136,9 @@ class BallotFlowHttpTests(BaseVotingTestCase):
             "This voting credential is not valid or has already been used.",
             status_code=403,
         )
-        # consumed token: same status and same message
+        # consumed token: shows duplicate vote message
         voter = self.election.voters.first()
-        _auth, token = issue_authorization(voter)
+        _auth, token = issue_authorization(voter, allow_reissue=True, reason="test")
         url = reverse("ballot_prepare", args=[token])
         form = self.client.get(url)
         self.client.post(
@@ -146,7 +152,7 @@ class BallotFlowHttpTests(BaseVotingTestCase):
         self.assertEqual(r.status_code, 403)
         self.assertContains(
             r,
-            "This voting credential is not valid or has already been used.",
+            "You have already cast your vote for this election. You cannot vote again.",
             status_code=403,
         )
 
@@ -154,8 +160,9 @@ class BallotFlowHttpTests(BaseVotingTestCase):
         url = reverse("voter_access", args=[self.election.pk])
         r = self.client.post(url, {"voter_id": "V001"})
         self.assertEqual(r.status_code, 200)
-        self.assertTrue(r.context["issued"])
-        self.assertTrue(r.context["token"])
+        # An active credential already exists from registration; no duplicate
+        # token is silently generated.
+        self.assertFalse(r.context.get("issued"))
         # unknown voter id: same page shape, no token
         r = self.client.post(url, {"voter_id": "NOPE"})
         self.assertEqual(r.status_code, 200)
@@ -210,6 +217,76 @@ class LifecycleHttpTests(BaseVotingTestCase):
         self.assertEqual(self.election.state, Election.STATE_OPEN)
         self.assertEqual(self.election.reopened_count, 1)
 
+    def test_missing_decision_never_rejects(self):
+        """A dropped submitter value must not be read as a rejection."""
+        self.client.force_login(self.official)
+        self.client.post(
+            reverse("approval_request", args=[self.election.pk]),
+            {"kind": "reopen", "reason": "Ballot box replaced after power cut."},
+        )
+        approval = ElectionApproval.objects.get(election=self.election, kind="reopen")
+
+        self.client.force_login(self.admin2)
+        # Simulates the submitter button's name/value being omitted from POST.
+        r = self.client.post(reverse("approval_decide", args=[approval.pk]), {"note": ""})
+        self.assertEqual(r.status_code, 302)
+        approval.refresh_from_db()
+        self.assertEqual(approval.status, ElectionApproval.STATUS_PENDING)
+        self.election.refresh_from_db()
+        self.assertEqual(self.election.state, Election.STATE_CLOSED)
+        self.assertTrue(
+            any("No valid decision" in str(m) for m in get_messages(r.wsgi_request))
+        )
+
+    def test_unknown_decision_never_rejects(self):
+        self.client.force_login(self.official)
+        self.client.post(
+            reverse("approval_request", args=[self.election.pk]),
+            {"kind": "reopen", "reason": "Ballot box replaced after power cut."},
+        )
+        approval = ElectionApproval.objects.get(election=self.election, kind="reopen")
+
+        self.client.force_login(self.admin2)
+        r = self.client.post(
+            reverse("approval_decide", args=[approval.pk]), {"decision": "maybe"}
+        )
+        self.assertEqual(r.status_code, 302)
+        approval.refresh_from_db()
+        self.assertEqual(approval.status, ElectionApproval.STATUS_PENDING)
+
+    def test_reject_decision_rejects(self):
+        self.client.force_login(self.official)
+        self.client.post(
+            reverse("approval_request", args=[self.election.pk]),
+            {"kind": "reopen", "reason": "Ballot box replaced after power cut."},
+        )
+        approval = ElectionApproval.objects.get(election=self.election, kind="reopen")
+
+        self.client.force_login(self.admin2)
+        r = self.client.post(
+            reverse("approval_decide", args=[approval.pk]),
+            {"decision": "reject", "note": "Insufficient evidence."},
+        )
+        self.assertEqual(r.status_code, 302)
+        approval.refresh_from_db()
+        self.assertEqual(approval.status, ElectionApproval.STATUS_REJECTED)
+        self.assertEqual(approval.decision_note, "Insufficient evidence.")
+        self.election.refresh_from_db()
+        self.assertEqual(self.election.state, Election.STATE_CLOSED)
+
+    def test_config_page_exposes_named_decision_buttons(self):
+        """The decide buttons must carry name/value for the POST contract."""
+        self.client.force_login(self.official)
+        self.client.post(
+            reverse("approval_request", args=[self.election.pk]),
+            {"kind": "reopen", "reason": "Ballot box replaced after power cut."},
+        )
+        self.client.force_login(self.admin2)
+        r = self.client.get(reverse("election_config", args=[self.election.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'name="decision" value="approve"')
+        self.assertContains(r, 'name="decision" value="reject"')
+
     def test_other_tenancy_cannot_trigger_actions(self):
         self.client.force_login(self.outsider)
         r = self.client.post(
@@ -233,7 +310,7 @@ class ResultsVisibilityHttpTests(BaseVotingTestCase):
     def setUp(self):
         self.election, self.position, self.candidates = self.open_election(with_voters=1)
         voter = self.election.voters.first()
-        issue_authorization(voter)
+        issue_authorization(voter, allow_reissue=True, reason="test")
         cast_ballot(
             election=self.election,
             voter=voter,
@@ -296,3 +373,70 @@ class ResultsVisibilityHttpTests(BaseVotingTestCase):
             reverse("recount", args=[self.election.pk]), {"reason": "judge order"}
         )
         self.assertEqual(r.status_code, 302)
+
+
+_PHOTO_MEDIA_ROOT = tempfile.mkdtemp(prefix="votesys-photo-tests-")
+
+
+@override_settings(MEDIA_ROOT=_PHOTO_MEDIA_ROOT)
+class CandidatePhotoUploadTests(BaseVotingTestCase):
+    """Uploading a passport photograph must never overflow the storage path.
+
+    Regression: ``elections/<uuid>/candidates/<uuid>/<file>`` is already 94
+    characters before the filename, so a name longer than a few characters
+    used to exceed ``ImageField``'s default ``max_length=100`` and Django
+    raised ``SuspiciousFileOperation`` while looking for a free filename.
+    """
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(_PHOTO_MEDIA_ROOT, ignore_errors=True)
+
+    def setUp(self):
+        self.election = self.make_election(title="Photo Election")
+        self.position = Position.objects.create(
+            election=self.election, title="President"
+        )
+        self.client.force_login(self.official)
+
+    def _photo(self, name: str) -> SimpleUploadedFile:
+        buffer = BytesIO()
+        Image.new("RGB", (8, 8), "white").save(buffer, format="JPEG")
+        return SimpleUploadedFile(
+            name, buffer.getvalue(), content_type="image/jpeg"
+        )
+
+    def _add_candidate(self, name: str, filename: str):
+        return self.client.post(
+            reverse("candidate_add", args=[self.election.pk, self.position.pk]),
+            {
+                "full_name": name,
+                "bio": "",
+                "manifesto": "",
+                "order": 0,
+                "status": "approved",
+                "photo": self._photo(filename),
+            },
+        )
+
+    def test_long_photo_filename_is_stored_without_overflow(self):
+        r = self._add_candidate("Alice A.", "ab_rah_" + "x" * 200 + ".jpg")
+        self.assertEqual(r.status_code, 302)
+
+        candidate = Candidate.objects.get(position=self.position, full_name="Alice A.")
+        max_length = Candidate._meta.get_field("photo").max_length
+        self.assertTrue(candidate.photo)
+        self.assertLessEqual(len(candidate.photo.name), max_length)
+        self.assertTrue(candidate.photo.storage.exists(candidate.photo.name))
+
+    def test_colliding_photo_filenames_are_both_stored(self):
+        self._add_candidate("Alice A.", "ab_rah.jpg")
+        self._add_candidate("Bob B.", "ab_rah.jpg")
+
+        alice = Candidate.objects.get(position=self.position, full_name="Alice A.")
+        bob = Candidate.objects.get(position=self.position, full_name="Bob B.")
+        self.assertTrue(alice.photo and bob.photo)
+        self.assertNotEqual(alice.photo.name, bob.photo.name)
+        for candidate in (alice, bob):
+            self.assertTrue(candidate.photo.storage.exists(candidate.photo.name))

@@ -1,25 +1,102 @@
-{% extends "base.html" %}
-{% block title %}Ballot received · {{ election.title }}{% endblock %}
+{% extends "ballot/base.html" %}
+{% block title %}Thank you · {{ election.title }}{% endblock %}
+{% block extra_head %}
+<meta http-equiv="refresh" content="3;url={% url 'voter_login' election.pk %}">
+{% endblock %}
 {% block content %}
-<div class="login-page">
-  <div class="login-card">
-    <h1>Your ballot has been sealed</h1>
-    {% if idempotent %}
-      <p class="hint">This submission was already accepted — here is your original receipt.</p>
-    {% endif %}
-    <p>Keep this receipt. It proves your ballot was accepted <strong>without</strong>
-      revealing its contents or linking it to you.</p>
-    <div class="token-display">{{ receipt_code }}</div>
-    <p class="hint">Ballot hash: <code>{{ ballot_hash }}</code><br>
-       Ballot box sequence: #{{ box_seq }}</p>
-    <p>
-      <a class="btn btn-outline" href="{% url 'receipt_lookup' election.pk %}?code={{ receipt_code }}">
-        Verify this receipt
-      </a>
-      <a class="btn btn-outline" href="{% url 'election_detail' election.pk %}">Back to election</a>
-    </p>
-    <p class="hint">You may close this page now. Your identity was not recorded with your
-      ballot and cannot be reconstructed by anyone, including administrators.</p>
+<style>
+  /* ---- Post-vote thank you ---- */
+  .thankyou-card {
+    max-width: 500px;
+    text-align: center;
+    gap: 1rem;
+  }
+  .seal-icon {
+    width: 76px;
+    height: 76px;
+    margin: 0 auto;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.1rem;
+    background: linear-gradient(160deg, #10b981 0%, var(--success) 100%);
+    color: #fff;
+    box-shadow: 0 16px 34px -10px rgb(5 150 105 / 60%);
+    animation: seal-pop 0.55s cubic-bezier(.2, 1.4, .4, 1) both;
+    position: relative;
+  }
+  .seal-icon::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px dashed rgb(16 185 129 / 45%);
+    animation: seal-ring 14s linear infinite;
+  }
+  @keyframes seal-pop { from { transform: scale(0.5) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+  @keyframes seal-ring { to { transform: rotate(360deg); } }
+  .thankyou-card h1 {
+    font-size: 1.5rem;
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    margin: 0;
+  }
+  .thankyou-card p { color: var(--text-secondary); line-height: 1.7; margin: 0; }
+  .thankyou-card .notice { text-align: left; }
+  .return-note {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    font-weight: 650;
+    color: var(--success);
+    padding: 0.7rem 0.9rem;
+    border-radius: var(--radius-md);
+    background: var(--success-bg);
+    border: 1px solid #bbf7d0;
+  }
+</style>
+
+<div class="login-card thankyou-card">
+  <div class="seal-icon"><i class="bi bi-check-lg"></i></div>
+
+  <h1>Thank you for voting</h1>
+  <p>Thank you for participating in <strong>{{ election.title }}</strong>. Your ballot has been sealed and recorded anonymously.</p>
+
+  <div class="notice notice-success">
+    <i class="bi bi-shield-check"></i>
+    <span>Your vote is final and cannot be changed.</span>
   </div>
+
+  <p class="return-note" id="autoReturn">
+    <i class="bi bi-arrow-repeat"></i>
+    <span>Returning to the voter login in 3 seconds…</span>
+  </p>
+
+  <a class="btn btn-outline btn-block" href="{% url 'voter_login' election.pk %}">
+    <i class="bi bi-box-arrow-in-right"></i> Return to voter login
+  </a>
 </div>
+
+<script>
+  (function () {
+    var seconds = 3;
+    var label = document.querySelector('#autoReturn span');
+    var target = "{% url 'voter_login' election.pk %}";
+    var timer = setInterval(function () {
+      seconds -= 1;
+      if (label) {
+        label.textContent = 'Returning to the voter login in ' + seconds +
+          ' second' + (seconds === 1 ? '' : 's') + '…';
+      }
+      if (seconds <= 0) {
+        clearInterval(timer);
+        window.location.replace(target);
+      }
+    }, 1000);
+  })();
+</script>
 {% endblock %}

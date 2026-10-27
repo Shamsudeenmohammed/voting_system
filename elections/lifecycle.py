@@ -28,6 +28,7 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 
+from . import governance
 from .config import compute_config_hash
 from .models import Election, ElectionApproval
 
@@ -48,13 +49,17 @@ TRANSITIONS: dict[str, set[str]] = {
     Election.STATE_ARCHIVED: set(),
 }
 
-# Edges that require a persisted four-edges approval record.
-DUAL_CONTROL: dict[tuple[str, str], str] = {
-    (Election.STATE_CONFIG_REVIEW, Election.STATE_APPROVED): "approve_config",
-    (Election.STATE_CLOSED, Election.STATE_OPEN): "reopen",
-    (Election.STATE_CERTIFIED, Election.STATE_REVIEW): "decertify",
-    (Election.STATE_PUBLISHED, Election.STATE_REVIEW): "decertify",
-}
+# Edges that require a persisted four-eyes approval record.  The canonical
+# mapping lives in :mod:`elections.governance` (the per-election policy may
+# waive an individual kind); it is re-exported here so existing imports keep
+# working.  Use ``governance.dual_control_kind(...)`` for the policy-aware kind.
+DUAL_CONTROL: dict[tuple[str, str], str] = dict(governance.DUAL_CONTROL_EDGES)
+
+# Super Admin emergency override.  The override is an *explicit*, confirmed,
+# audited action - never a silent bypass - so it requires a long documented
+# reason and an exact confirmation token (the UI asks the operator to type it).
+OVERRIDE_CONFIRM_TOKEN = "OVERRIDE"
+MIN_OVERRIDE_REASON = 15
 
 # Edges the system may take by itself (schedule driven).
 AUTO_EDGES = {
@@ -171,11 +176,25 @@ def _check_capability(election, actor, dst: str) -> None:
         Election.STATE_PUBLISHED,
     ):
         allowed = roles.can_approve_election(actor, election)
+        message = "Your role is not permitted to archive a certified election."
     else:
         allowed = roles.can_manage_election(actor, election)
+        message = "Your role is not permitted to perform this lifecycle change."
     if not allowed:
+        raise LifecycleError(message, code="forbidden")
+
+    # Per-election governance policy can narrow who may certify / publish.
+    # Super Admins are never bound by it (``governance`` short-circuits).
+    if dst == Election.STATE_CERTIFIED and not governance.can_certify(actor, election):
         raise LifecycleError(
-            "Your role is not permitted to perform this lifecycle change.",
+            "This election's governance policy does not permit your role to "
+            "certify the results.",
+            code="forbidden",
+        )
+    if dst == Election.STATE_PUBLISHED and not governance.can_publish(actor, election):
+        raise LifecycleError(
+            "This election's governance policy does not permit your role to "
+            "publish the results.",
             code="forbidden",
         )
 
@@ -192,6 +211,7 @@ def transition(
 ) -> Election:
     """Perform one state transition atomically (or raise :class:`LifecycleError`)."""
     from audit import services as audit
+    from organizations import roles
 
     edge: tuple[str, str] | None = None
     with transaction.atomic():
@@ -219,7 +239,7 @@ def transition(
         else:
             _check_capability(locked, actor, dst)
 
-        dual_kind = DUAL_CONTROL.get(edge)
+        dual_kind = governance.dual_control_kind(locked, src, dst)
         if dual_kind:
             if approval is None:
                 raise LifecycleError(
@@ -236,7 +256,11 @@ def transition(
                     "Approval record is not valid for this transition.",
                     code="approval_invalid",
                 )
-            if approval.requested_by_id and approval.requested_by_id == approval.decided_by_id:
+            if (
+                approval.requested_by_id
+                and approval.requested_by_id == approval.decided_by_id
+                and not roles.is_system_admin(actor)
+            ):
                 raise LifecycleError(
                     "Four-eyes rule: a different user must decide this approval.",
                     code="four_eyes",
@@ -415,10 +439,15 @@ def decide_approval(
         election = Election.objects.get(pk=approval.election_id)
         if not roles.can_approve_election(actor, election):
             raise LifecycleError(
-                "Only an organization administrator may decide this request.",
+                "Only an organization administrator or the election commission "
+                "chair may decide this request.",
                 code="forbidden",
             )
-        if approval.requested_by_id and approval.requested_by_id == actor.pk:
+        if (
+            approval.requested_by_id
+            and approval.requested_by_id == actor.pk
+            and not roles.is_system_admin(actor)
+        ):
             raise LifecycleError(
                 "Four-eyes rule: you cannot decide a request you submitted.",
                 code="four_eyes",
@@ -465,3 +494,99 @@ def decide_approval(
         )
         approval.refresh_from_db()
         return approval
+
+
+# ---------------------------------------------------------------------------
+# Super Admin emergency override
+# ---------------------------------------------------------------------------
+
+
+def admin_override(
+    election: Election,
+    target: str,
+    *,
+    actor,
+    reason: str,
+    confirm: str = "",
+    request=None,
+) -> Election:
+    """Force a lifecycle transition as the Super Admin, bypassing four-eyes."""
+    from audit import services as audit
+    from organizations import roles
+
+    if not roles.is_system_admin(actor):
+        raise LifecycleError(
+            "The emergency override is restricted to the Super Admin.",
+            code="forbidden",
+        )
+
+    reason = (reason or "").strip()
+    if len(reason) < MIN_OVERRIDE_REASON:
+        raise LifecycleError(
+            "An emergency override requires a documented reason of at least "
+            f"{MIN_OVERRIDE_REASON} characters.",
+            code="reason_required",
+        )
+    if (confirm or "").strip().upper() != OVERRIDE_CONFIRM_TOKEN:
+        raise LifecycleError(
+            f"Type {OVERRIDE_CONFIRM_TOKEN} to confirm the emergency override.",
+            code="confirmation_required",
+        )
+
+    locked = Election.objects.select_related("organization").get(pk=election.pk)
+    src, dst = locked.state, target
+    if dst == src:
+        raise LifecycleError(f"Election is already in state '{dst}'.", code="noop")
+    if not is_allowed(src, dst):
+        raise LifecycleError(
+            f"Transition {src} -> {dst} is not permitted.",
+            code="illegal_transition",
+        )
+
+    # Policy-aware dual-control kind for this edge (``None`` = no four-eyes).
+    dual_kind = governance.dual_control_kind(locked, src, dst)
+    approval = None
+    if dual_kind:
+        now = timezone.now()
+        approval = ElectionApproval.objects.create(
+            election=locked,
+            kind=dual_kind,
+            requested_by=actor,
+            reason=reason,
+            status=ElectionApproval.STATUS_APPROVED,
+            decided_by=actor,
+            decided_at=now,
+            decision_note="Super Admin emergency override (self-decided).",
+        )
+
+    audit.record(
+        action="admin_override",
+        actor=actor,
+        election=locked,
+        organization=locked.organization,
+        request=request,
+        object_type="election",
+        object_id=str(locked.pk),
+        reason=reason,
+        details={
+            "from": src,
+            "to": dst,
+            "dual_control_bypassed": bool(dual_kind),
+            "approval_kind": dual_kind or "",
+            "scope": "system-wide (Super Admin)",
+            "consequences": (
+                "Lifecycle transition forced without waiting for a second "
+                "approver; four-eyes control superseded and recorded."
+            ),
+        },
+    )
+
+    election = transition(
+        locked,
+        dst,
+        actor=actor,
+        approval=approval,
+        request=request,
+        reason=reason,
+    )
+    return election

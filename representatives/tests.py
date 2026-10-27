@@ -49,7 +49,7 @@ class RepresentativeAccessTests(BaseVotingTestCase):
 
     def _cast_one_ballot(self):
         voter = self.election.voters.first()
-        issue_authorization(voter)
+        issue_authorization(voter, allow_reissue=True, reason="test")
         return cast_ballot(
             election=self.election,
             voter=voter,
@@ -227,6 +227,38 @@ class RepresentativeAccessTests(BaseVotingTestCase):
         # station rows carry only aggregate ballot volumes
         for row in r.context["stations"]:
             self.assertEqual(set(row), {"station", "ballots"})
+
+    def test_dashboard_offers_next_actions_and_report_status(self):
+        self._apply(as_user=self.rep_user)
+        rep = Representative.objects.get(election=self.election)
+        self.client.force_login(self.official)
+        self.client.post(reverse("decide", args=[rep.pk]), {"decision": "approve"})
+        IncidentReport.objects.create(
+            election=self.election,
+            reporter=rep,
+            title="Ballot box seal broken",
+            description="Observed at Main Hall.",
+            status="open",
+        )
+
+        self.client.force_login(self.rep_user)
+        r = self.client.get(reverse("representative_dashboard"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["open_incidents"], 1)
+        # voting is OPEN, so live turnout is withheld from representatives
+        self.assertFalse(r.context["live_turnout_visible"])
+        body = r.content.decode()
+        # the guidance panel links to the rep's allowed surfaces
+        for label in (
+            "Report an incident",
+            "My reports",
+            "My live monitor",
+            "Browse elections",
+        ):
+            self.assertIn(label, body)
+        for name in ("incident_create", "incident_list", "monitor"):
+            self.assertIn(reverse(name, args=[self.election.pk]), body)
+        self.assertContains(r, "Ballot box seal broken")
 
     def test_dashboard_without_approval_renders_empty_state(self):
         self.client.force_login(self.official)  # staff but not a representative

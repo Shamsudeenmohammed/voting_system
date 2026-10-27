@@ -15,26 +15,45 @@ endpoints.  Referenced by `elections/models.py`.
 | `audit` | Hash-chained append-only event log, chain verification, signed checkpoints, JSON export |
 | `representatives` | Candidate self-application, representative accreditation, station incidents/objections |
 | `monitoring` | Live status JSON (5 s polling), monitor page, per-org dashboard, audit export |
-| `config` / `voting_system` | Settings profiles (`config/settings/{base,local,production,test}.py` selected by `DJANGO_ENV`), Celery app, root URLconf (`voting_system.urls`) |
+| `config` / `voting_system` | Settings profiles (`config/settings/{base,local,production,test}.py` selected by `DJANGO_ENV`, incl. the `jazzmin` back-office theme), Celery app, root URLconf (`voting_system.urls`) |
 
 The dashboard is at `/dashboard/…`, the Django admin is mounted at `/watch/`
-(not `/admin/`), the voter-facing access point at
-`/elections/<id>/access/` and the ballot at `/ballot/<token>/`.
+(not `/admin/`) and is themed with **django-jazzmin**, the voter-facing access
+point at `/elections/<id>/access/` and the ballot at `/ballot/<token>/`.
 
 ## Tenancy
 
 Every `Election` belongs to an `Organization`.  Organizations form a tree
 (`parent`); roles are memberships on an organization:
 
-* `org_admin`, `election_official`, `auditor` — election staff
+* `org_admin` — **institution election administrator**; full control of its
+  own organization subtree only;
+* `ec_chair` — **election-commission chair**; election oversight for the
+  assigned organization subtree (lifecycle, readiness, officials, escalations,
+  reconciliation, and certification/publication where the election governance
+  policy assigns it);
+* `election_official`, `auditor` — election staff
   (`organizations.roles.is_election_staff`);
 * `observer` — read-only monitoring, never staff surfaces.
+
+A Django `is_superuser` is the **Super Admin**: unrestricted, system-wide, and
+never required to obtain another person's approval.  `EC_CHAIR_SYSTEM_SCOPE_USERNAMES`
+(settings/env) is an explicit grant of system-wide election/people oversight to
+named chairs — it never grants tenant lifecycle administration, which stays
+with the Super Admin.
 
 `role_in(user, org)` matches membership on the organization **or any
 ancestor**, and `organizations_for(user)` expands to the whole managed
 subtree, so a regional admin sees everything beneath their node.  Result
 publication additionally requires `can_view_results_early` (privileged
 staff roles), which also gates audit export.
+
+The management console is gated by `organizations.roles.console_required`,
+which admits the Super Admin and any console-role membership regardless of the
+Django `is_staff` flag.  Anonymous visitors are redirected to the admin sign-in
+page; an authenticated user without console access receives a 403 that names
+the missing permission.  Candidate representatives keep their own read-only
+surface and never reach console or staff-only material.
 
 ## Election lifecycle
 
@@ -52,12 +71,34 @@ DRAFT → REGISTRATION → CONFIG_REVIEW → APPROVED → SCHEDULED → OPEN
   direct action endpoint: `approve_config`, `reopen`, `decertify`.  They are
   driven by `ElectionApproval` records where the requester may not be the
   decider, a reason is mandatory, and approvals are invalidated when their
-  target state changes.
+  target state changes.  The Super Admin is exempt: they may decide an
+  approval they raised (never blocked by another person's approval).
+* Each election carries a **governance policy** in `Election.rules["governance"]`
+  (`elections/governance.py`): `certify_authority` / `publish_authority`
+  (which role may certify/publish), `require_institution_approval`, and
+  per-edge `dual_control` waivers.  Defaults preserve the pre-governance
+  behaviour, and because `rules` is excluded from the configuration hash, a
+  policy change never invalidates a frozen election configuration.
+* The Super Admin has an explicit, confirmed **emergency override**
+  (`elections.lifecycle.admin_override`, `POST …/override/`): a mandatory
+  reason, an `OVERRIDE` confirmation token, and an `admin_override` audit
+  event that records the actor, target and before/after state.  Every other
+  role is refused, and illegal edges are still rejected.
 * Certification (`tally.services.certify_latest`) re-verifies reconciliation
   **live** at certification time.  Failure codes: `reconciliation_failed`
   (ballot box drifted), `tally_missing`, `approval_invalid`,
   `snapshot_superseded`, `snapshot_stale` (a certified snapshot no longer
   matches the current recomputation).
+
+## Super Admin Control Center
+
+`/manage/control/` (`organizations/control_center.py`) is the system-wide
+console for the Super Admin only: health checks, operational alerts, role and
+object counts, a cross-tenant search (`/manage/control/search/`), an override
+ledger (`/manage/control/overrides/`) and recovery actions
+(`/manage/control/recovery/` — restore console access, toggle an
+organization, clear the config cache, unlock a user).  Every action is
+audited; non-superusers receive a 403.
 
 ## Ballot data flow (secret ballot)
 

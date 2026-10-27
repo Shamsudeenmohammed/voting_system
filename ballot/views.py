@@ -92,8 +92,12 @@ def _positions(election):
         pos = qs.get(p["id"])
         if pos is None:
             continue
+        # Config ids are canonical strings; model PKs are UUID objects, so
+        # compare on the string form (a raw ``c.pk in {...}`` would silently
+        # match nothing and render every position as empty).
+        by_id = {str(c.pk): c for c in pos.candidates.all()}
         candidates = [
-            c for c in pos.candidates.all() if c.pk in {x["id"] for x in p["candidates"]}
+            by_id[str(c["id"])] for c in p["candidates"] if str(c["id"]) in by_id
         ]
         rows.append({"config": p, "position": pos, "candidates": candidates})
     return rows
@@ -127,6 +131,24 @@ def prepare(request, token: str):
     voter = auth.voter
     election = auth.election
     credential_usable = auth.usable
+    
+    # Check if already voted (consumed authorization) before showing ballot.
+    # A POST still falls through so cast_ballot can resolve an *idempotent
+    # replay* (lost response after acceptance) to the original receipt.
+    if auth.consumed_at and request.method != "POST":
+        audit.record(
+            action="duplicate_vote_rejected",
+            election=election,
+            request=request,
+            details={"reason": "already_voted"},
+        )
+        return _error(
+            request,
+            403,
+            "Ballot access denied",
+            "You have already cast your vote for this election. You cannot vote again.",
+        )
+
     if not credential_usable and request.method != "POST":
         # Consumed/revoked credential: the ballot form is never shown again.
         # A POST still falls through so cast_ballot can resolve an *idempotent

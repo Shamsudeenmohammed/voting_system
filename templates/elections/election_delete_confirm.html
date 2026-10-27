@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Delete election · {{ election.title }}{% endblock %}
+{% block content %}
+<style>
+  .confirm-card { max-width: 680px; margin: 2rem auto; }
+  .danger-list { margin: 0.75rem 0 1rem 1.25rem; }
+  .danger-list li { margin-bottom: 0.35rem; }
+  code.chain { background: var(--bg-secondary); padding: 0.2rem 0.4rem; border-radius: var(--radius-xs); font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace; font-size: 0.85rem; }
+</style>
+
+<div class="confirm-card">
+  <section class="card">
+    <h1 style="margin: 0 0 0.5rem; font-size: 1.4rem; color: var(--danger); display: flex; align-items: center; gap: 0.5rem;">
+      <i class="bi bi-trash"></i> Confirm permanent deletion
+    </h1>
+    <p class="hint" style="margin: 0 0 1rem;">
+      Election: <strong>{{ election.title }}</strong> ({{ election.organization.name }})<br>
+      ID: <code class="chain">{{ election.pk }}</code><br>
+      State: <strong>{{ election.get_state_display }}</strong>
+    </p>
+
+    <div class="notice notice-danger">
+      <i class="bi bi-shield-exclamation"></i>
+      <span>
+        This is a <strong>Super Admin break-glass action</strong>. Permanently deleting this election will remove:
+      </span>
+    </div>
+    <ul class="danger-list">
+      <li>Election row and metadata</li>
+      <li>Ballot structure (positions, candidates)</li>
+      <li>Voters, polling stations, approvals</li>
+      <li>Ballot authorizations, preparations, ballots and ballot box</li>
+      <li>Tally snapshots and results-related records</li>
+      <li>Representatives, attendance records, incidents</li>
+    </ul>
+    <p class="hint" style="margin: 0 0 1rem;">
+      The audit chain <strong>election:{{ election.pk }}</strong> and all audit events for this election
+      will <strong>remain</strong> (with <code>election_id</code> preserved where applicable; verification remains intact).
+      This cannot be undone.
+    </p>
+
+    <form method="post" class="add-form" onsubmit="return confirm('Permanently delete this election? This cannot be undone.');">
+      {% csrf_token %}
+      {{ delete_form.as_div }}
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+        <a class="btn btn-sm btn-outline" href="{% url 'election_config' election.pk %}">
+          <i class="bi bi-arrow-left"></i> Cancel
+        </a>
+        <button class="btn btn-sm btn-danger" type="submit">
+          <i class="bi bi-trash"></i> Permanently delete
+        </button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

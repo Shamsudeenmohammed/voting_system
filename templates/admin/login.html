@@ -1,0 +1,364 @@
+{% load i18n static jazzmin %}
+{% get_jazzmin_settings request as jz %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'en-us' }}" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% if form.errors %}{% translate "Error:" %} {% endif %}{% translate "Back-office sign in" %} · {{ jz.site_title }}</title>
+
+  <link rel="shortcut icon" href="{% static jz.site_icon %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'vendor/fontawesome-free/css/all.min.css' %}">
+
+  <style>
+    /* ---- VoteSys back-office sign in ---------------------------------- */
+    :root {
+      --vs-primary: #4f46e5;
+      --vs-primary-hover: #6366f1;
+      --vs-primary-dark: #4338ca;
+      --vs-primary-light: #eef2ff;
+      --vs-navy-900: #0b1229;
+      --vs-navy-800: #111c3f;
+      --vs-text: #0f172a;
+      --vs-text-secondary: #475569;
+      --vs-text-muted: #94a3b8;
+      --vs-border: #e3e8f2;
+      --vs-border-strong: #cbd5e1;
+      --vs-bg: #f4f6fb;
+      --vs-radius: 16px;
+      --vs-radius-sm: 10px;
+      --vs-ring: 0 0 0 3px rgb(99 102 241 / 28%);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+      color: var(--vs-text);
+      background:
+        radial-gradient(1100px 500px at 85% -10%, rgb(99 102 241 / 7%), transparent 60%),
+        radial-gradient(900px 420px at -10% 0%, rgb(37 99 235 / 5%), transparent 55%),
+        var(--vs-bg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.25rem;
+    }
+
+    .auth-wrap {
+      width: 100%;
+      max-width: 1020px;
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 2.5rem;
+      align-items: center;
+    }
+
+    /* Brand panel */
+    .auth-brand {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(150deg, var(--vs-navy-900) 0%, var(--vs-navy-800) 60%, #262a75 100%);
+      color: #fff;
+      border-radius: var(--vs-radius);
+      padding: 2.75rem 2.5rem;
+      box-shadow: 0 10px 24px -6px rgb(15 23 42 / 12%), 0 24px 48px -12px rgb(15 23 42 / 16%);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .auth-brand::after {
+      content: "";
+      position: absolute;
+      right: -70px;
+      bottom: -70px;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgb(99 102 241 / 38%) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .auth-brand > * { position: relative; z-index: 1; }
+    .auth-brand-mark {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgb(255 255 255 / 10%);
+      border: 1px solid rgb(255 255 255 / 16%);
+    }
+    .auth-brand-mark img { width: 38px; height: 38px; display: block; }
+    .auth-brand h1 { font-size: 1.55rem; font-weight: 750; letter-spacing: -0.03em; line-height: 1.2; margin: 0; }
+    .auth-brand p { color: rgb(226 232 240 / 85%); font-size: 0.9rem; margin: 0; }
+    .auth-points { list-style: none; padding: 0; margin: 0.25rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
+    .auth-points li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+      color: rgb(226 232 240 / 92%);
+      line-height: 1.5;
+    }
+    .auth-points li i { color: #a5b4fc; margin-top: 0.2rem; }
+    .auth-back {
+      margin-top: 0.5rem;
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #c7d2fe;
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.4rem 0.7rem;
+      border-radius: 9px;
+      border: 1px solid rgb(255 255 255 / 14%);
+      transition: background 160ms ease, color 160ms ease;
+    }
+    .auth-back:hover { background: rgb(255 255 255 / 10%); color: #fff; }
+
+    /* Sign-in card */
+    .auth-card {
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid var(--vs-border);
+      border-radius: var(--vs-radius);
+      box-shadow: 0 24px 60px -12px rgb(15 23 42 / 22%);
+      padding: 2.25rem;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 1.15rem;
+    }
+    .auth-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 4px;
+      border-radius: var(--vs-radius) var(--vs-radius) 0 0;
+      background: linear-gradient(90deg, var(--vs-primary) 0%, #818cf8 50%, #38bdf8 100%);
+    }
+    .auth-card h2 {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 1.4rem;
+      font-weight: 750;
+      letter-spacing: -0.03em;
+      color: var(--vs-text);
+      margin: 0;
+    }
+    .auth-card h2 i { color: var(--vs-primary); }
+    .auth-sub { color: var(--vs-text-secondary); font-size: 0.875rem; margin: 0; }
+
+    .notice {
+      display: flex;
+      gap: 0.7rem;
+      align-items: flex-start;
+      padding: 0.8rem 0.95rem;
+      border-radius: var(--vs-radius-sm);
+      border: 1px solid #fecaca;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.8125rem;
+      line-height: 1.55;
+    }
+    .notice i { margin-top: 0.15rem; }
+
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.05rem; }
+    .form-group label {
+      font-weight: 600;
+      font-size: 0.82rem;
+      color: var(--vs-text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .field { position: relative; }
+    .field input {
+      width: 100%;
+      padding: 0.68rem 0.9rem;
+      border: 1px solid var(--vs-border-strong);
+      border-radius: var(--vs-radius-sm);
+      font-size: 0.9rem;
+      font-family: inherit;
+      color: var(--vs-text);
+      background: #fff;
+      box-shadow: inset 0 1px 2px rgb(15 23 42 / 3%);
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+    .field input:hover { border-color: #a5b4fc; }
+    .field input:focus { outline: none; border-color: var(--vs-primary); box-shadow: var(--vs-ring); }
+    .field input::placeholder { color: var(--vs-text-muted); }
+    .field.has-toggle input { padding-right: 2.75rem; }
+
+    .password-toggle {
+      position: absolute;
+      right: 0.4rem;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      color: var(--vs-text-muted);
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 160ms ease, color 160ms ease;
+    }
+    .password-toggle:hover { background: #eef2f7; color: var(--vs-text-secondary); }
+    .password-toggle:focus-visible { outline: none; box-shadow: var(--vs-ring); }
+
+    .btn-submit {
+      position: relative;
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.55rem;
+      padding: 0.72rem 1.35rem;
+      border: none;
+      border-radius: var(--vs-radius-sm);
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 650;
+      color: #fff;
+      cursor: pointer;
+      background: linear-gradient(180deg, var(--vs-primary-hover) 0%, var(--vs-primary-dark) 100%);
+      box-shadow: 0 1px 2px rgb(49 46 129 / 25%), 0 8px 18px -8px rgb(79 70 229 / 55%);
+      transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    }
+    .btn-submit:hover { background: linear-gradient(180deg, #6d70f5 0%, var(--vs-primary) 100%); transform: translateY(-1px); }
+    .btn-submit:active { transform: translateY(1px); }
+    .btn-submit:focus-visible { outline: none; box-shadow: var(--vs-ring); }
+
+    .auth-foot { text-align: center; font-size: 0.82rem; color: var(--vs-text-muted); margin: 0; }
+    .auth-foot a { color: var(--vs-primary-dark); font-weight: 600; text-decoration: none; }
+    .auth-foot a:hover { text-decoration: underline; }
+
+    @media (max-width: 900px) {
+      .auth-wrap { grid-template-columns: 1fr; gap: 1.5rem; max-width: 480px; }
+      .auth-brand { padding: 1.85rem 1.6rem; }
+      .auth-card { padding: 1.85rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <section class="auth-brand" aria-hidden="true">
+      <span class="auth-brand-mark">
+        <img src="{% static jz.site_logo %}" alt="">
+      </span>
+      <h1>{{ jz.site_header }} back office</h1>
+      <p>Administration, election operations and audit for authorised staff only.</p>
+      <ul class="auth-points">
+        <li><i class="fas fa-user-shield"></i> Restricted to staff accounts with an assigned role</li>
+        <li><i class="fas fa-clipboard-check"></i> Every change is written to the hash-chained audit log</li>
+        <li><i class="fas fa-shield-halved"></i> Ballot secrecy and four-eyes approvals are never bypassed here</li>
+      </ul>
+      <a class="auth-back" href="{% url 'home' %}">
+        <i class="fas fa-arrow-left"></i> Back to the voting site
+      </a>
+    </section>
+
+    <main class="auth-card">
+      <h2><i class="fas fa-key"></i> {% translate "Staff sign in" %}</h2>
+      <p class="auth-sub">Election administrators, officials and auditors sign in here. Voters never need an account.</p>
+
+      {% if form.errors %}
+        <div class="notice" role="alert" aria-live="polite">
+          <i class="fas fa-triangle-exclamation"></i>
+          <span>
+            {% if form.non_field_errors %}
+              {{ form.non_field_errors|join:" " }}
+            {% else %}
+              {% translate "Please enter a correct username and password. Note that both fields may be case-sensitive." %}
+            {% endif %}
+          </span>
+        </div>
+      {% endif %}
+
+      {% if user.is_authenticated %}
+        <div class="notice" role="alert">
+          <i class="fas fa-circle-info"></i>
+          <span>
+            {% blocktranslate trimmed %}
+              You are authenticated as {{ username }}, but are not authorised to access
+              this page. Would you like to sign in to a different account?
+            {% endblocktranslate %}
+          </span>
+        </div>
+      {% endif %}
+
+      <form method="post" action="{{ app_path }}" novalidate>
+        {% csrf_token %}
+        <div class="form-group">
+          <label for="id_username"><i class="fas fa-user"></i> {% translate "Username" %}</label>
+          <div class="field">
+            <input type="text" name="username" id="id_username" placeholder="{% translate 'Enter your username' %}"
+                   required autofocus autocomplete="username"
+                   {% if form.username.value %}value="{{ form.username.value }}"{% endif %}>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="id_password"><i class="fas fa-lock"></i> {% translate "Password" %}</label>
+          <div class="field has-toggle">
+            <input type="password" name="password" id="id_password" placeholder="{% translate 'Enter your password' %}"
+                   required autocomplete="current-password">
+            <button type="button" class="password-toggle" id="passwordToggle"
+                    aria-label="{% translate 'Show password' %}" aria-controls="id_password">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="btn-submit">
+          <i class="fas fa-right-to-bracket"></i> {% translate "Sign in" %}
+        </button>
+      </form>
+
+      {% url 'admin_password_reset' as password_reset_url %}
+      <p class="auth-foot">
+        {% if password_reset_url %}
+          <a href="{{ password_reset_url }}">{% translate "Forgotten your password or username?" %}</a>
+        {% else %}
+          {% translate "Contact a system administrator if you need access." %}
+        {% endif %}
+      </p>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+      var toggle = document.getElementById('passwordToggle');
+      var input = document.getElementById('id_password');
+      if (toggle && input) {
+        toggle.addEventListener('click', function () {
+          var show = input.type === 'password';
+          input.type = show ? 'text' : 'password';
+          toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+          toggle.innerHTML = show ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+          input.focus();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

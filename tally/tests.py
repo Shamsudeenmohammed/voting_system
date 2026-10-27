@@ -18,7 +18,7 @@ class TallyTests(BaseVotingTestCase):
         from ballot.services import cast_ballot, issue_authorization, prepare_ballot
 
         for voter, picks in zip(election.voters.all(), votes):
-            issue_authorization(voter)
+            issue_authorization(voter, allow_reissue=True, reason="test")
             cast_ballot(
                 election=election,
                 voter=voter,

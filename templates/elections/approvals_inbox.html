@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Approvals · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Approvals inbox ---- */
+  .inbox-section { display: flex; flex-direction: column; gap: 0.85rem; }
+  .inbox-section > h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .inbox-section > h2 i { color: var(--primary); }
+  .approval-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.15rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  .approval-card.decidable { border-left: 4px solid var(--warning); }
+  .approval-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .approval-kind { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary-dark); }
+  .approval-election { font-size: 1rem; font-weight: 650; letter-spacing: -0.01em; }
+  .approval-election a { color: inherit; text-decoration: none; }
+  .approval-election a:hover { color: var(--primary); }
+  .approval-meta { font-size: 0.78rem; color: var(--text-tertiary); display: flex; gap: 0.9rem; flex-wrap: wrap; }
+  .approval-reason {
+    background: var(--bg-soft);
+    border: 1px dashed var(--border-color-strong);
+    border-radius: var(--radius-md);
+    padding: 0.7rem 0.9rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+  .decide-form { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; }
+  .decide-form .form-group { margin: 0; flex: 1 1 260px; }
+  .decide-actions { display: flex; gap: 0.5rem; }
+  .four-eyes-note { font-size: 0.78rem; color: var(--text-tertiary); display: flex; gap: 0.4rem; align-items: flex-start; }
+  .four-eyes-note i { color: var(--primary); margin-top: 0.1rem; }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>Approvals</h1>
+    <p class="sub">
+      Sensitive transitions — approving a configuration, reopening a closed
+      election, or correcting certified results — need a documented request and
+      a second administrator's decision. A request can never be approved by the
+      person who submitted it.
+    </p>
+  </div>
+
+  <section class="inbox-section">
+    <h2><i class="bi bi-shield-check"></i> Waiting on your decision</h2>
+    {% if decidable %}
+      {% for a in decidable %}
+        <article class="approval-card decidable">
+          <div class="approval-top">
+            <div>
+              <div class="approval-kind">{{ a.get_kind_display }}</div>
+              <div class="approval-election"><a href="{% url 'election_config' a.election.pk %}">{{ a.election.title }}</a></div>
+            </div>
+            <span class="badge badge-warning">Pending</span>
+          </div>
+          <div class="approval-meta">
+            <span><i class="bi bi-building"></i> {{ a.election.organization.name }}</span>
+            <span><i class="bi bi-person"></i> Requested by {{ a.requested_by.get_username|default:"—" }}</span>
+            <span><i class="bi bi-clock"></i> {{ a.requested_at|date:"Y-m-d H:i" }}</span>
+          </div>
+          <div class="approval-reason"><strong>Reason:</strong> {{ a.reason }}</div>
+          <form class="decide-form" method="post" action="{% url 'approval_decide' a.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+              <label for="note-{{ a.pk }}">Decision note (optional)</label>
+              <input class="input" type="text" id="note-{{ a.pk }}" name="note" placeholder="e.g. Configuration verified against the mandate">
+            </div>
+            <div class="decide-actions">
+              <button class="btn btn-sm btn-success" type="submit" name="decision" value="approve"><i class="bi bi-check-lg"></i> Approve</button>
+              <button class="btn btn-sm btn-danger" type="submit" name="decision" value="reject"><i class="bi bi-x-lg"></i> Reject</button>
+            </div>
+          </form>
+          <div class="four-eyes-note"><i class="bi bi-info-circle"></i><span>Approving applies the transition immediately and is recorded in the audit chain.</span></div>
+        </article>
+      {% endfor %}
+    {% else %}
+      <div class="notice notice-info"><i class="bi bi-inbox"></i> No requests are waiting on you right now.</div>
+    {% endif %}
+  </section>
+
+  <section class="inbox-section">
+    <h2><i class="bi bi-hourglass-split"></i> Your requests awaiting others</h2>
+    {% if awaiting %}
+      {% for a in awaiting %}
+        <article class="approval-card">
+          <div class="approval-top">
+            <div>
+              <div class="approval-kind">{{ a.get_kind_display }}</div>
+              <div class="approval-election"><a href="{% url 'election_config' a.election.pk %}">{{ a.election.title }}</a></div>
+            </div>
+            <span class="badge badge-warning">Pending</span>
+          </div>
+          <div class="approval-meta">
+            <span><i class="bi bi-building"></i> {{ a.election.organization.name }}</span>
+            <span><i class="bi bi-clock"></i> {{ a.requested_at|date:"Y-m-d H:i" }}</span>
+          </div>
+          <div class="approval-reason">{{ a.reason }}</div>
+        </article>
+      {% endfor %}
+    {% else %}
+      <div class="notice notice-info"><i class="bi bi-inbox"></i> You have no outstanding requests.</div>
+    {% endif %}
+  </section>
+
+  <section class="inbox-section">
+    <h2><i class="bi bi-clock-history"></i> Recently decided</h2>
+    {% if decided %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Election</th><th>Kind</th><th>Status</th><th>Requested by</th><th>Decided by</th><th>Decided</th></tr></thead>
+          <tbody>
+            {% for a in decided %}
+              <tr>
+                <td><a href="{% url 'election_config' a.election.pk %}">{{ a.election.title }}</a></td>
+                <td>{{ a.get_kind_display }}</td>
+                <td>
+                  {% if a.status == 'approved' %}<span class="badge badge-open">Approved</span>
+                  {% else %}<span class="badge badge-danger">Rejected</span>{% endif %}
+                </td>
+                <td>{{ a.requested_by.get_username|default:"—" }}</td>
+                <td>{{ a.decided_by.get_username|default:"—" }}</td>
+                <td>{{ a.decided_at|date:"Y-m-d H:i"|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="notice notice-info"><i class="bi bi-inbox"></i> No decisions have been recorded yet.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

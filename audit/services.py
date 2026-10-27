@@ -193,6 +193,13 @@ def verify_chain(key: str, using: str | None = None) -> dict:
             error = f"broken link at seq {ev.seq} (prev_hash mismatch)"
             first_bad = ev.seq
             break
+        election_id_str = ""
+        if ev.election_id:
+            election_id_str = str(ev.election_id)
+        else:
+            # Recover election id from chain_key when FK was nulled (e.g. after election deletion)
+            if ev.chain_key and ev.chain_key.startswith("election:"):
+                election_id_str = ev.chain_key.split("election:", 1)[1] or ""
         recomputed = _event_hash(
             chain_key=ev.chain_key,
             seq=ev.seq,
@@ -202,7 +209,7 @@ def verify_chain(key: str, using: str | None = None) -> dict:
                 "actor": str(ev.actor_id) if ev.actor_id else "",
                 "actor_label": ev.actor_label,
                 "organization": str(ev.organization_id) if ev.organization_id else "",
-                "election": str(ev.election_id) if ev.election_id else "",
+                "election": election_id_str,
                 "object_type": ev.object_type,
                 "object_id": ev.object_id,
                 "reason": ev.reason,

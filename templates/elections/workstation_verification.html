@@ -1,0 +1,603 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Verification workstation{% endblock %}
+{% block extra_head %}
+{% comment %}
+  Backdrop: point VERIFICATION_BACKGROUND_IMAGE at any image, or replace
+  static/img/workstation-background.svg. The white veil keeps the form
+  readable over busy photographs.
+
+  This kiosk-critical CSS lives in <head> so the first paint is already the
+  verification console: a refresh never flashes the application chrome, and
+  the console is never laid out against the application shell before the
+  page styles below arrive.
+{% endcomment %}
+<style>
+  :root {
+    --verification-background: url("{{ background_url|safe }}");
+    --verification-veil: rgba(255, 255, 255, 0.58);
+  }
+
+  /* Kiosk mode: no application chrome. */
+  .app-header,
+  .app-sidebar,
+  .app-footer,
+  .nav-backdrop { display: none !important; }
+
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background-color: var(--navy-900);
+    background-image: none;
+  }
+
+  /* Fixed layer so the picture covers the full viewport, even on small
+     screens, without stretching or repeating. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--verification-veil), var(--verification-veil)),
+      var(--verification-background);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<style>
+  /* Repeated here so it still wins over the shared body background once the
+     in-body design system has been parsed. */
+  body {
+    background-color: var(--navy-900);
+    background-image: none;
+  }
+
+  .app-shell {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app-body {
+    max-width: none;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+  }
+  .app-body .app-main {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: clamp(0.65rem, 2.2vh, 1.35rem) clamp(0.8rem, 2.4vw, 1.6rem);
+    /* Pin the console near the top instead of vertically centering it. The
+       card keeps its top edge fixed while content streams in or notices
+       appear, so a refresh never shows the token form sliding into place. */
+    padding-top: clamp(1rem, 32vh, 22rem);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: clamp(0.45rem, 1.1vh, 0.75rem);
+    overflow: hidden;
+  }
+
+  /* Page-level notices stay compact and never stretch the page. The card
+     result panel carries the issuance outcome, so these are only a fallback. */
+  .app-body .app-main > .messages {
+    flex: 0 0 auto;
+    width: min(960px, 100%);
+    max-height: min(18vh, 140px);
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 55%) transparent;
+  }
+  .app-body .app-main > .messages .message {
+    width: 100%;
+    padding: 0.5rem 0.65rem 0.5rem 0.8rem;
+    font-size: 0.8rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+  }
+  .app-body .app-main > .messages .message i { font-size: 0.95rem; }
+  .app-body .app-main > .messages::-webkit-scrollbar { width: 8px; }
+  .app-body .app-main > .messages::-webkit-scrollbar-thumb {
+    background: rgb(148 163 184 / 45%);
+    border-radius: 999px;
+  }
+
+  .verify-card {
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: 960px;
+    max-height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: clamp(0.85rem, 2vh, 1.4rem) clamp(0.9rem, 2.2vw, 1.55rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.55rem, 1.2vh, 0.8rem);
+    background: rgb(255 255 255 / 86%);
+    border: 1px solid rgb(255 255 255 / 72%);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 30px 80px -28px rgb(11 18 41 / 55%),
+                0 1px 0 rgb(255 255 255 / 70%) inset;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Reserve the scrollbar track so the two-column console never shifts
+       sideways when the card starts or stops overflowing. The second
+       declaration keeps the reservation symmetrical; browsers that do not
+       understand "both-edges" fall back to the single-sided gutter. */
+    scrollbar-gutter: stable;
+    scrollbar-gutter: stable both-edges;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 55%) transparent;
+  }
+  .verify-card::-webkit-scrollbar { width: 8px; }
+  .verify-card::-webkit-scrollbar-thumb {
+    background: rgb(148 163 184 / 45%);
+    border-radius: 999px;
+  }
+
+  /* Compact title bar */
+  .verify-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.35rem 1rem;
+    flex-wrap: wrap;
+  }
+  .verify-title { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+  .verify-eyebrow {
+    font-size: 0.66rem;
+    font-weight: 750;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--primary-dark);
+  }
+  .verify-head h1 {
+    margin: 0;
+    font-size: clamp(1.2rem, 2.3vw, 1.45rem);
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    text-align: left;
+  }
+  .verify-head .device-line {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    font-size: 0.76rem;
+    color: var(--text-tertiary);
+  }
+  .device-line i { color: var(--primary); }
+  .device-code { font-weight: 700; color: var(--text-secondary); letter-spacing: 0.02em; }
+  .device-sep { color: var(--text-muted); }
+
+  /* Status on the left, issuance form on the right. This keeps the whole
+     console in view without a scrolling form on normal kiosk displays. */
+  .verify-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+    gap: clamp(0.55rem, 1.4vw, 0.85rem);
+    align-items: start;
+    min-height: 0;
+  }
+  .verify-status { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
+  .verify-action { min-width: 0; }
+
+  .verify-card .card {
+    background: rgb(255 255 255 / 64%);
+    border: 1px solid rgb(226 232 240 / 85%);
+    box-shadow: none;
+    padding: clamp(0.65rem, 1.6vh, 0.9rem) clamp(0.75rem, 1.5vw, 0.95rem);
+    border-radius: var(--radius-md);
+  }
+  .verify-card .card h2 {
+    font-size: 0.7rem;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-tertiary);
+    margin: 0 0 0.4rem;
+  }
+  .verify-card .card p { margin: 0.1rem 0; font-size: 0.83rem; }
+
+  .result-card .message {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    gap: 0.5rem;
+    box-shadow: none;
+    border-radius: 9px;
+  }
+  .result-card .message i { font-size: 0.95rem; margin-top: 0.05rem; }
+  .result-card .message span { overflow-wrap: anywhere; }
+
+  .token-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-top: 0.55rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: var(--radius-md);
+    border: 1px dashed #a5b4fc;
+    background: linear-gradient(180deg, rgb(238 242 255 / 92%) 0%, rgb(255 255 255 / 82%) 100%);
+    flex-wrap: wrap;
+  }
+  .token-panel .token-label {
+    display: block;
+    font-size: 0.64rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .token-code {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Courier New", monospace;
+    font-size: clamp(1.4rem, 3vw, 1.8rem);
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    line-height: 1.15;
+    color: var(--primary-dark);
+    word-break: break-all;
+    user-select: all;
+  }
+  .token-panel .copy-btn { flex-shrink: 0; }
+
+  .verify-card .card .voter-name {
+    margin: 0 0 0.5rem;
+    font-size: 0.86rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .voter-name strong {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Courier New", monospace;
+    font-size: 0.8rem;
+  }
+  .voter-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem 0.6rem;
+    margin: 0;
+  }
+  .voter-facts div { min-width: 0; }
+  .voter-facts dt {
+    font-size: 0.6rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .voter-facts dd {
+    margin: 0.05rem 0 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  /* Token state and the two workstation-safe lifecycle actions. */
+  .token-state {
+    margin-top: 0.55rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgb(226 232 240 / 85%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .token-state-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .token-state-summary .badge {
+    font-size: 0.6rem;
+    padding: 0.18rem 0.5rem;
+  }
+  .token-state-summary .hint {
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+  .token-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin: 0;
+  }
+  .token-actions .btn {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.72rem;
+    border-radius: 8px;
+  }
+  .token-actions .token-revoke {
+    color: var(--danger);
+    border-color: #fecaca;
+    background: #fff;
+  }
+  .token-actions .token-revoke:hover:not(:disabled) {
+    background: var(--danger-bg);
+    border-color: #fca5a5;
+    color: #b91c1c;
+  }
+
+  .verify-empty { display: flex; align-items: center; gap: 0.7rem; }
+  .verify-empty-icon {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 1.1rem;
+  }
+  .verify-empty h2 { margin: 0 0 0.15rem; }
+  .verify-empty p { margin: 0; font-size: 0.78rem; color: var(--text-tertiary); line-height: 1.45; }
+
+  .form-panel {
+    background: rgb(255 255 255 / 64%);
+    border: 1px solid rgb(226 232 240 / 85%);
+    border-radius: var(--radius-md);
+    padding: clamp(0.65rem, 1.6vh, 0.9rem) clamp(0.75rem, 1.5vw, 0.95rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .form-panel-head h2 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+  .form-panel-head p {
+    margin: 0.1rem 0 0;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+  }
+  .verify-form { display: flex; flex-direction: column; gap: 0.55rem; }
+  .form-row { display: flex; flex-direction: column; gap: 0.25rem; }
+  .form-row label { font-weight: 600; font-size: 0.74rem; color: var(--text-secondary); }
+  .form-row input, .form-row select {
+    width: 100%;
+    padding: 0.48rem 0.7rem;
+    border: 1px solid var(--border-color-strong);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+  .form-row input:focus, .form-row select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: var(--ring);
+  }
+  .election-line {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0.38rem 0.5rem;
+    border: 1px solid rgb(199 210 254 / 65%);
+    border-radius: 8px;
+    background: rgb(238 242 255 / 65%);
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .election-line i { color: var(--primary); flex-shrink: 0; }
+  .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .btn-row .btn {
+    flex: 1;
+    min-width: 0;
+    padding: 0.48rem 0.65rem;
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 760px) {
+    .verify-layout { grid-template-columns: minmax(0, 1fr); }
+    .verify-head { align-items: flex-start; }
+    .verify-head .device-line { width: 100%; }
+    .voter-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 520px) {
+    .app-body .app-main { padding: 0.55rem; gap: 0.45rem; }
+    .app-body .app-main > .messages { max-height: 22vh; }
+    .verify-card { padding: 0.8rem; border-radius: var(--radius-lg); gap: 0.55rem; }
+    .verify-eyebrow { display: none; }
+    .verify-head h1 { font-size: 1.15rem; }
+    .verify-head .device-line { font-size: 0.72rem; }
+    .voter-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .token-panel { align-items: flex-start; flex-direction: column; }
+    .token-panel .copy-btn { width: 100%; justify-content: center; }
+    .btn-row .btn { flex: 1 1 100%; }
+  }
+
+  /* Short laptop/kiosk displays: trim vertical chrome rather than let the
+     form become a scrolling panel. */
+  @media (max-height: 640px) and (min-width: 761px) {
+    .app-body .app-main { padding-top: clamp(0.75rem, 14vh, 4rem); padding-bottom: 0.5rem; gap: 0.4rem; }
+    .verify-card { padding: 0.7rem 1rem; gap: 0.45rem; }
+    .verify-eyebrow { display: none; }
+    .verify-head h1 { font-size: 1.15rem; }
+    .verify-head .device-line { font-size: 0.7rem; }
+    .verify-card .card { padding: 0.55rem 0.7rem; }
+    .verify-card .card h2 { margin-bottom: 0.3rem; }
+    .form-panel { padding: 0.55rem 0.7rem; gap: 0.4rem; }
+    .verify-form { gap: 0.4rem; }
+    .form-panel-head p { display: none; }
+    .form-row input, .form-row select { padding: 0.4rem 0.6rem; }
+    .btn-row .btn { padding: 0.42rem 0.6rem; }
+    .token-state { margin-top: 0.4rem; padding-top: 0.35rem; gap: 0.3rem; }
+    .token-state-summary .hint { font-size: 0.68rem; }
+    .token-actions .btn { padding: 0.32rem 0.4rem; font-size: 0.68rem; }
+  }
+</style>
+
+<div class="verify-card">
+  <header class="verify-head">
+    <div class="verify-title">
+      <span class="verify-eyebrow">Polling official console</span>
+      <h1>Verification workstation</h1>
+    </div>
+    <p class="hint device-line">
+      <span><i class="bi bi-pc-display" aria-hidden="true"></i> {{ workstation.name }} <span class="device-code">{{ workstation.code }}</span></span>
+      {% if election %}
+        <span class="device-sep" aria-hidden="true">&middot;</span>
+        <span><i class="bi bi-check2-circle" aria-hidden="true"></i> {{ election }}</span>
+      {% endif %}
+    </p>
+  </header>
+
+  <div class="verify-layout">
+    <div class="verify-status">
+      {% if result %}
+      <section class="card result-card" aria-live="polite">
+        <h2>Token result</h2>
+        {% if result.status == "issued" or result.status == "reissued" or result.status == "revoked" %}
+          <div class="message success"><i class="bi bi-check-circle"></i><span>{{ result.message }}</span></div>
+        {% elif result.status == "active_token" or result.status == "no_token" %}
+          <div class="message warning"><i class="bi bi-exclamation-triangle"></i><span>{{ result.message }}</span></div>
+        {% else %}
+          <div class="message error"><i class="bi bi-x-circle"></i><span>{{ result.message }}</span></div>
+        {% endif %}
+        {% if result.token %}
+        <div class="token-panel">
+          <div>
+            <span class="token-label">Voting token</span>
+            <div class="token-code" id="issued-token">{{ result.token }}</div>
+          </div>
+          <button type="button" class="copy-btn" data-copy-target="#issued-token">
+            <i class="bi bi-clipboard"></i> Copy
+          </button>
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {% if voter %}
+      <section class="card voter-card">
+        <h2>Voter</h2>
+        <p class="voter-name"><strong>{{ voter.voter_id }}</strong> &mdash; {{ voter.full_name }}</p>
+        <dl class="voter-facts">
+          <div><dt>Status</dt><dd>{{ voter.get_status_display }}</dd></div>
+          <div><dt>Eligibility</dt><dd>{{ voter_eligible|yesno:"Eligible,Not eligible" }}</dd></div>
+          <div><dt>Ballot</dt><dd>{{ voter.has_voted|yesno:"Cast,Not cast" }}</dd></div>
+        </dl>
+        {% if verification_token %}
+        <div class="token-state">
+          <div class="token-state-summary">
+            {% if verification_token.state == "used" %}
+              <span class="badge badge-info">Voted</span>
+              <span class="hint">A ballot has been cast. The token is locked.</span>
+            {% elif verification_token.state == "active" %}
+              <span class="badge badge-open">Token active</span>
+              <span class="hint">
+                {% if verification_token.authorization.expires_at %}
+                  Expires {{ verification_token.authorization.expires_at|date:"j M, H:i" }}.
+                {% else %}
+                  No expiry set.
+                {% endif %}
+                Replacing it cancels the old token.
+              </span>
+            {% elif verification_token.state == "expired" %}
+              <span class="badge badge-warning">Token expired</span>
+              <span class="hint">Unused. Replace it with a fresh token, or revoke it.</span>
+            {% elif verification_token.state == "revoked" %}
+              <span class="badge badge-closed">Token revoked</span>
+              <span class="hint">Issue a new token when the voter is ready.</span>
+            {% else %}
+              <span class="badge badge-closed">No token</span>
+              <span class="hint">Issue a token for this voter.</span>
+            {% endif %}
+          </div>
+          {% if verification_token.can_manage %}
+          <form method="post" class="token-actions" data-no-loading>
+            {% csrf_token %}
+            <input type="hidden" name="election" value="{{ election.pk }}">
+            <input type="hidden" name="voter_id" value="{{ voter.voter_id }}">
+            {% if voter_eligible %}
+            <button name="retrieve_token" value="1" type="submit" class="btn btn-outline"
+                    title="Revoke the unused token and display a fresh one.">
+              <i class="bi bi-arrow-repeat"></i> Retrieve / replace
+            </button>
+            {% endif %}
+            <button name="revoke_token" value="1" type="submit" class="btn token-revoke"
+                    title="Revoke the unused token. Blocked after the voter has voted.">
+              <i class="bi bi-slash-circle"></i> Revoke
+            </button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {% if not result and not voter %}
+      <section class="card verify-empty">
+        <span class="verify-empty-icon" aria-hidden="true"><i class="bi bi-person-vcard"></i></span>
+        <div>
+          <h2>Ready for verification</h2>
+          <p>Enter a voter ID to confirm eligibility and issue a single-use token for this election.</p>
+        </div>
+      </section>
+      {% endif %}
+    </div>
+
+    <aside class="verify-action" aria-label="Token issuance">
+      <div class="form-panel">
+        <div class="form-panel-head">
+          <h2>Issue voting token</h2>
+          <p>Confirm the voter's identity before issuing. Only one active token can exist per voter.</p>
+        </div>
+        <form method="post" data-no-loading class="verify-form">
+          {% csrf_token %}
+          {% if workstation.election %}
+            <input type="hidden" name="election" value="{{ workstation.election.pk }}">
+            <p class="election-line"><i class="bi bi-check2-circle" aria-hidden="true"></i> {{ workstation.election }}</p>
+          {% else %}
+            <div class="form-row">
+              <label for="id_election">Election</label>
+              <select id="id_election" name="election">
+                {% for e in elections %}<option value="{{ e.pk }}" {% if e == election %}selected{% endif %}>{{ e }}</option>{% endfor %}
+              </select>
+            </div>
+          {% endif %}
+          <div class="form-row">
+            <label for="id_voter_id">Voter ID</label>
+            <input id="id_voter_id" name="voter_id" value="{{ voter_id }}" required{% if not voter and not result %} autofocus{% endif %}>
+          </div>
+          <div class="btn-row">
+            <button name="lookup" value="1" type="submit" class="btn btn-outline">Lookup voter</button>
+            <button name="issue_token" value="1" type="submit" class="btn btn-primary">Issue token</button>
+          </div>
+        </form>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

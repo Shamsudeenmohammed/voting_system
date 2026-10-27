@@ -14,7 +14,7 @@ peppered with a secret that also lives outside it.
 | Ballot encryption key | `BALLOT_ENCRYPTION_KEY` env or `secrets/ballot.key` | sealed ballots permanently undecryptable → all count as spoiled |
 | Result signing key (Ed25519 PEM) | `RESULT_SIGNING_KEY` env or `secrets/result_signing.key` | old snapshots can no longer be re-verified by the server; publish the **public key** now (see §5) |
 | Voter token pepper | `VOTER_TOKEN_PEPPER` env | every outstanding voter credential stops verifying (already-cast ballots are unaffected) |
-| Issued-credential CSVs | `private/credentials/<election>.csv` | operators can no longer reissue lost voter tokens |
+| Issued-credential CSVs | `private/credentials/<election>.csv` | the original printed token copies are lost; replacement tokens can still be issued from the verification workstation |
 
 Store the key material in a different place than the DB dump (otherwise the
 "database thief" threat in `docs/BALLOT_SECRECY.md` is moot).
@@ -94,9 +94,11 @@ serving traffic.
 * **A certified result must be retracted**: decertify (four-eyes).  The old
   snapshot is superseded, never deleted, and the supersession is
   audit-chained.
-* **Lost voter token**: reissue at the voter access point while the
-  election is in registration/open — old authorization is revoked, nothing
-  links the new token to a ballot.
+* **Lost or expired voter token**: at the verification workstation, look up
+  the voter and choose **Retrieve / replace** (revokes the unused token and
+  displays a fresh one) or **Revoke** (invalidates it without issuing a
+  replacement). Both actions are audited and are refused once the voter has
+  cast a ballot. Replacement requires the election to still be open.
 * **Disk exposure of `private/credentials/`**: those CSVs contain live
   tokens; treat their exposure as credential compromise and revoke/reissue
   affected elections' credentials.

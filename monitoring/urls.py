@@ -5,6 +5,12 @@ from . import views
 
 urlpatterns = [
     path("elections/<uuid:pk>/monitor/", views.monitor, name="monitor"),
+    path("elections/<uuid:pk>/monitor/board/", views.live_board, name="live_board"),
+    path(
+        "elections/<uuid:pk>/monitor/board/data/",
+        views.live_board_data,
+        name="live_board_data",
+    ),
     path("elections/<uuid:pk>/live/", views.live_status, name="live_status"),
     path("elections/<uuid:pk>/audit/export/", views.audit_export, name="audit_export"),
     path("org/", views.org_dashboard, name="org_dashboard"),

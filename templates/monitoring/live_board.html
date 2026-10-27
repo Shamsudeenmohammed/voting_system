@@ -1,0 +1,1243 @@
+{% extends "base.html" %}
+{% block title %}Live results · {{ election.title }}{% endblock %}
+
+{# Projection board: no site chrome, no navigation, no outbound links. #}
+{% block app_header %}{% endblock %}
+{% block app_footer %}{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --rb-bg: #050a16;
+    --rb-panel: rgb(15 23 42 / 78%);
+    --rb-panel-soft: rgb(30 41 59 / 48%);
+    --rb-border: rgb(148 163 184 / 16%);
+    --rb-border-strong: rgb(148 163 184 / 28%);
+    --rb-text: #f8fafc;
+    --rb-muted: #94a3b8;
+    --rb-dim: #64748b;
+    --rb-accent: #818cf8;
+    --rb-cyan: #22d3ee;
+    --rb-gold: #fbbf24;
+    --rb-green: #34d399;
+    --rb-red: #fb7185;
+  }
+
+  html, body {
+    background: var(--rb-bg) !important;
+  }
+
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* The base layout normally reserves a sidebar/header.  A wall display must
+     use the whole panel and must never invite a stray click out of the board. */
+  .app-sidebar,
+  .nav-backdrop,
+  .sidebar-toggle,
+  .app-header,
+  .app-footer,
+  .messages {
+    display: none !important;
+  }
+
+  .app-body {
+    display: block !important;
+    width: 100%;
+    max-width: none !important;
+    min-height: 100vh;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .app-main {
+    width: 100%;
+    max-width: none !important;
+    min-height: 100vh;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .results-board [hidden] {
+    display: none !important;
+  }
+
+  .results-board {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.85rem, 1.2vw, 1.35rem);
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: clamp(1rem, 2.1vw, 2.25rem);
+    color: var(--rb-text);
+    background:
+      radial-gradient(circle at 7% -8%, rgb(79 70 229 / 26%), transparent 34%),
+      radial-gradient(circle at 98% 2%, rgb(34 211 238 / 10%), transparent 31%),
+      linear-gradient(180deg, #071021 0%, var(--rb-bg) 56%, #040814 100%);
+  }
+
+  .results-board::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgb(148 163 184 / 3.5%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(148 163 184 / 3.5%) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(to bottom, black, transparent 68%);
+  }
+
+  /* ------------------------------------------------ Header */
+  .rb-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  .rb-brand {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.75rem, 1.1vw, 1.1rem);
+    min-width: 0;
+  }
+
+  .rb-mark {
+    display: grid;
+    place-items: center;
+    width: clamp(2.8rem, 3.5vw, 3.65rem);
+    height: clamp(2.8rem, 3.5vw, 3.65rem);
+    flex-shrink: 0;
+    border-radius: 16px;
+    color: #eef2ff;
+    font-size: clamp(1.3rem, 1.8vw, 1.8rem);
+    background: linear-gradient(145deg, #4f46e5, #312e81);
+    border: 1px solid rgb(165 180 252 / 28%);
+    box-shadow: 0 12px 30px rgb(49 46 129 / 40%);
+  }
+
+  .rb-kicker {
+    display: block;
+    margin-bottom: 0.18rem;
+    color: var(--rb-accent);
+    font-size: clamp(0.6rem, 0.72vw, 0.72rem);
+    font-weight: 800;
+    letter-spacing: 0.17em;
+    text-transform: uppercase;
+  }
+
+  .rb-title {
+    margin: 0;
+    color: var(--rb-text);
+    font-size: clamp(1.35rem, 2.15vw, 2.25rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+
+  .rb-subtitle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.65rem;
+    margin: 0.32rem 0 0;
+    color: var(--rb-muted);
+    font-size: clamp(0.7rem, 0.86vw, 0.88rem);
+  }
+
+  .rb-subtitle span + span::before {
+    content: "·";
+    margin-right: 0.65rem;
+    color: var(--rb-dim);
+  }
+
+  .rb-header-side {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+
+  .rb-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.35rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid rgb(52 211 153 / 30%);
+    background: rgb(16 185 129 / 10%);
+    color: #a7f3d0;
+    font-size: clamp(0.6rem, 0.72vw, 0.7rem);
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .rb-live-dot {
+    position: relative;
+    width: 0.48rem;
+    height: 0.48rem;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--rb-green);
+    box-shadow: 0 0 0 4px rgb(52 211 153 / 10%);
+  }
+
+  .rb-live[data-mode="open"] .rb-live-dot::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    border: 2px solid rgb(52 211 153 / 70%);
+    animation: rb-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes rb-ping {
+    75%, 100% { transform: scale(2.1); opacity: 0; }
+  }
+
+  .rb-live[data-mode="closed"],
+  .rb-live[data-mode="pending"] {
+    color: #cbd5e1;
+    border-color: var(--rb-border);
+    background: rgb(148 163 184 / 8%);
+  }
+
+  .rb-live[data-mode="closed"] .rb-live-dot,
+  .rb-live[data-mode="pending"] .rb-live-dot {
+    background: var(--rb-dim);
+    box-shadow: none;
+  }
+
+  .rb-live[data-mode="certified"] {
+    color: #fde68a;
+    border-color: rgb(251 191 36 / 27%);
+    background: rgb(251 191 36 / 8%);
+  }
+
+  .rb-live[data-mode="certified"] .rb-live-dot {
+    background: var(--rb-gold);
+    box-shadow: 0 0 0 4px rgb(251 191 36 / 10%);
+  }
+
+  .rb-clock {
+    min-width: 6.2rem;
+    color: #e2e8f0;
+    font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace;
+    font-size: clamp(0.92rem, 1.15vw, 1.12rem);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rb-icon-button {
+    display: grid;
+    place-items: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    flex-shrink: 0;
+    border: 1px solid var(--rb-border);
+    border-radius: 10px;
+    color: #cbd5e1;
+    background: rgb(148 163 184 / 7%);
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  }
+
+  .rb-icon-button:hover,
+  .rb-icon-button:focus-visible {
+    color: #fff;
+    border-color: var(--rb-border-strong);
+    background: rgb(148 163 184 / 14%);
+    outline: none;
+  }
+
+  /* ------------------------------------------------ Summary strip */
+  .rb-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(0.45rem, 0.75vw, 0.8rem);
+  }
+
+  .rb-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.1rem;
+    min-width: 0;
+    padding: clamp(0.55rem, 0.8vw, 0.85rem) clamp(0.75rem, 1vw, 1.1rem);
+    border: 1px solid var(--rb-border);
+    border-radius: 13px;
+    background: linear-gradient(150deg, rgb(30 41 59 / 54%), rgb(15 23 42 / 58%));
+    box-shadow: 0 12px 26px rgb(0 0 0 / 12%);
+  }
+
+  .rb-stat-value {
+    color: var(--rb-text);
+    font-size: clamp(1.15rem, 1.75vw, 1.7rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rb-stat-label {
+    color: var(--rb-dim);
+    font-size: clamp(0.56rem, 0.65vw, 0.65rem);
+    font-weight: 750;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .rb-state-pill {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.16rem 0.58rem;
+    border-radius: 999px;
+    font-size: clamp(0.74rem, 0.92vw, 0.95rem);
+    font-weight: 750;
+    line-height: 1.35;
+    color: #c7d2fe;
+    background: rgb(79 70 229 / 17%);
+    border: 1px solid rgb(129 140 248 / 25%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rb-state-pill[data-tone="open"] {
+    color: #a7f3d0;
+    background: rgb(16 185 129 / 12%);
+    border-color: rgb(52 211 153 / 28%);
+  }
+
+  .rb-state-pill[data-tone="closed"] {
+    color: #cbd5e1;
+    background: rgb(148 163 184 / 10%);
+    border-color: var(--rb-border);
+  }
+
+  .rb-state-pill[data-tone="certified"] {
+    color: #fde68a;
+    background: rgb(251 191 36 / 10%);
+    border-color: rgb(251 191 36 / 26%);
+  }
+
+  /* ------------------------------------------------ Positions */
+  .rb-positions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+    gap: clamp(0.6rem, 0.9vw, 1rem);
+    align-items: start;
+    align-content: center;
+    width: 100%;
+    flex: 1;
+  }
+
+  .rb-position {
+    width: 100%;
+    min-width: 0;
+    padding: clamp(0.7rem, 1vw, 1.05rem);
+    border: 1px solid var(--rb-border);
+    border-radius: 17px;
+    background:
+      linear-gradient(155deg, rgb(30 41 59 / 64%), rgb(15 23 42 / 84%));
+    box-shadow: 0 20px 50px rgb(0 0 0 / 16%);
+  }
+
+  .rb-position:only-child {
+    max-width: 1200px;
+    justify-self: center;
+  }
+
+  .rb-position-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.3rem 0.8rem;
+    flex-wrap: wrap;
+    padding: 0 0.15rem clamp(0.55rem, 0.8vw, 0.75rem);
+    margin-bottom: clamp(0.15rem, 0.4vw, 0.35rem);
+    border-bottom: 1px solid rgb(148 163 184 / 10%);
+  }
+
+  .rb-position-title {
+    display: flex;
+    align-items: center;
+    gap: 0.58rem;
+    min-width: 0;
+  }
+
+  .rb-position-number {
+    display: grid;
+    place-items: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    flex-shrink: 0;
+    border-radius: 8px;
+    color: var(--rb-accent);
+    background: rgb(79 70 229 / 14%);
+    border: 1px solid rgb(129 140 248 / 18%);
+    font-size: 0.62rem;
+    font-weight: 850;
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rb-position-title h2 {
+    margin: 0;
+    color: var(--rb-text);
+    font-size: clamp(1.04rem, 1.32vw, 1.4rem);
+    font-weight: 750;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .rb-position-meta {
+    flex-shrink: 0;
+    color: var(--rb-dim);
+    font-size: clamp(0.64rem, 0.76vw, 0.76rem);
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .rb-position-meta strong {
+    color: var(--rb-muted);
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rb-candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rb-candidate {
+    display: grid;
+    grid-template-columns: 1.45rem clamp(3.2rem, 4.6vw, 5rem) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: clamp(0.55rem, 0.8vw, 0.9rem);
+    min-width: 0;
+    padding: clamp(0.5rem, 0.72vw, 0.9rem);
+    border: 1px solid transparent;
+    border-radius: 13px;
+    transition: background 400ms ease, border-color 400ms ease;
+  }
+
+  .rb-candidate.is-leading {
+    border-color: rgb(251 191 36 / 18%);
+    background: linear-gradient(90deg, rgb(251 191 36 / 10%), rgb(251 191 36 / 1.5%));
+  }
+
+  .rb-rank {
+    color: var(--rb-dim);
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rb-candidate.is-leading .rb-rank {
+    color: var(--rb-gold);
+  }
+
+  .rb-photo {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    overflow: hidden;
+    border: 1px solid rgb(148 163 184 / 18%);
+    border-radius: 9px;
+    background:
+      radial-gradient(circle at 35% 28%, rgb(129 140 248 / 35%), transparent 58%),
+      linear-gradient(150deg, #1e293b, #111827);
+  }
+
+  .rb-photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .rb-initials {
+    color: #c7d2fe;
+    font-size: clamp(0.68rem, 0.9vw, 0.88rem);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+  }
+
+  .rb-candidate-body {
+    min-width: 0;
+  }
+
+  .rb-candidate-top {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .rb-name {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    color: var(--rb-text);
+    font-size: clamp(0.98rem, 1.3vw, 1.5rem);
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    line-height: 1.22;
+    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+  }
+
+  .rb-leading {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.24rem;
+    flex-shrink: 0;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid rgb(251 191 36 / 22%);
+    border-radius: 999px;
+    color: #fcd34d;
+    background: rgb(251 191 36 / 8%);
+    font-size: clamp(0.54rem, 0.6vw, 0.62rem);
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .rb-tied {
+    flex-shrink: 0;
+    color: var(--rb-muted);
+    font-size: 0.58rem;
+    font-weight: 700;
+  }
+
+  .rb-bar {
+    height: clamp(0.34rem, 0.45vw, 0.48rem);
+    margin: 0.33rem 0 0.22rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgb(148 163 184 / 13%);
+  }
+
+  .rb-bar-fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #6366f1 0%, #22d3ee 100%);
+    box-shadow: 0 0 16px rgb(34 211 238 / 24%);
+    transition: width 750ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .rb-candidate.is-leading .rb-bar-fill {
+    background: linear-gradient(90deg, #d97706 0%, #fbbf24 60%, #fde68a 100%);
+    box-shadow: 0 0 16px rgb(251 191 36 / 22%);
+  }
+
+  .rb-candidate-foot {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--rb-dim);
+    font-size: clamp(0.64rem, 0.76vw, 0.76rem);
+    line-height: 1.2;
+  }
+
+  .rb-candidate-foot strong {
+    color: var(--rb-muted);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rb-share {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 0.06rem;
+    min-width: clamp(4rem, 5.6vw, 6rem);
+    padding-left: 0.3rem;
+    color: var(--rb-text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .rb-share [data-percent] {
+    font-size: clamp(1.7rem, 2.75vw, 3rem);
+    font-weight: 800;
+    letter-spacing: -0.05em;
+    line-height: 1;
+  }
+
+  .rb-share-sym {
+    color: var(--rb-muted);
+    font-size: clamp(0.72rem, 0.92vw, 0.92rem);
+    font-weight: 700;
+  }
+
+  .rb-candidate.is-leading .rb-share [data-percent] {
+    color: #fde68a;
+  }
+
+  .rb-empty {
+    padding: 1rem 0.4rem;
+    color: var(--rb-dim);
+    font-size: 0.78rem;
+  }
+
+  .rb-board-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 16rem;
+    border: 1px dashed var(--rb-border-strong);
+    border-radius: 18px;
+    color: var(--rb-muted);
+    text-align: center;
+  }
+
+  .rb-board-empty i {
+    color: var(--rb-accent);
+    font-size: 2rem;
+  }
+
+  /* ------------------------------------------------ Health footer */
+  .rb-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem 1rem;
+    flex-wrap: wrap;
+    padding-top: clamp(0.55rem, 0.75vw, 0.8rem);
+    border-top: 1px solid rgb(148 163 184 / 12%);
+    color: var(--rb-dim);
+    font-size: clamp(0.58rem, 0.68vw, 0.68rem);
+    line-height: 1.4;
+  }
+
+  .rb-health {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .rb-health-dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--rb-green);
+    box-shadow: 0 0 0 3px rgb(52 211 153 / 8%);
+  }
+
+  .rb-health strong {
+    color: #a7f3d0;
+    font-weight: 750;
+  }
+
+  .rb-health-detail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rb-health-detail::before {
+    content: "·";
+    margin-right: 0.4rem;
+    color: var(--rb-dim);
+  }
+
+  .rb-health[data-status="idle"] .rb-health-dot {
+    background: var(--rb-muted);
+    box-shadow: none;
+  }
+
+  .rb-health[data-status="idle"] strong {
+    color: var(--rb-muted);
+  }
+
+  .rb-health[data-status="attention"] .rb-health-dot {
+    background: var(--rb-gold);
+    box-shadow: 0 0 0 3px rgb(251 191 36 / 10%);
+  }
+
+  .rb-health[data-status="attention"] strong {
+    color: #fcd34d;
+  }
+
+  .rb-health[data-status="offline"] .rb-health-dot {
+    background: var(--rb-red);
+    box-shadow: 0 0 0 3px rgb(251 113 133 / 10%);
+  }
+
+  .rb-health[data-status="offline"] strong {
+    color: #fda4af;
+  }
+
+  .rb-footer-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem 0.9rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+
+  .rb-footer-meta i {
+    margin-right: 0.2rem;
+    color: var(--rb-dim);
+  }
+
+  .rb-footer-meta span {
+    white-space: nowrap;
+  }
+
+  .rb-aggregate {
+    padding: 0.12rem 0.45rem;
+    border: 1px solid var(--rb-border);
+    border-radius: 999px;
+    color: var(--rb-muted);
+    background: rgb(148 163 184 / 5%);
+  }
+
+  @media (max-width: 980px) {
+    .rb-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .rb-header-side {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .results-board {
+      padding: 0.85rem;
+    }
+
+    .rb-mark {
+      border-radius: 12px;
+    }
+
+    .rb-header-side {
+      justify-content: flex-start;
+    }
+
+    .rb-clock {
+      min-width: auto;
+    }
+
+    .rb-stat {
+      padding: 0.5rem 0.65rem;
+    }
+
+    .rb-candidate {
+      grid-template-columns: clamp(2.4rem, 12vw, 3.1rem) minmax(0, 1fr) auto;
+      gap: 0.45rem;
+    }
+
+    .rb-rank {
+      display: none;
+    }
+
+    .rb-share {
+      min-width: 2.7rem;
+    }
+
+    .rb-share [data-percent] {
+      font-size: 1.2rem;
+    }
+
+    .rb-leading span {
+      display: none;
+    }
+
+    .rb-footer {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .rb-footer-meta {
+      margin-left: 0;
+    }
+
+    .rb-aggregate {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rb-bar-fill,
+    .rb-candidate {
+      transition: none;
+    }
+
+    .rb-live[data-mode="open"] .rb-live-dot::after {
+      animation: none;
+    }
+  }
+</style>
+
+<div
+  class="results-board"
+  id="resultsBoard"
+  data-fingerprint="{{ board.fingerprint }}"
+  data-data-url="{{ data_url }}"
+  data-refresh-ms="{{ board.refresh_ms }}"
+>
+  <header class="rb-header">
+    <div class="rb-brand">
+      <span class="rb-mark" aria-hidden="true"><i class="bi bi-shield-check"></i></span>
+      <div>
+        <span class="rb-kicker">Engine Room · Live Results</span>
+        <h1 class="rb-title">{{ board.election_title }}</h1>
+        <p class="rb-subtitle">
+          {% if board.organization_name %}<span>{{ board.organization_name }}</span>{% endif %}
+          {% if board.schedule_label %}<span>{{ board.schedule_label }}</span>{% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="rb-header-side">
+      <span class="rb-live" id="liveBadge" data-mode="{{ board.state_tone }}">
+        <span class="rb-live-dot" aria-hidden="true"></span>
+        <span id="liveLabel">
+          {% if board.is_open %}Live counting{% elif board.is_final %}Final results{% else %}{{ board.state_label }}{% endif %}
+        </span>
+      </span>
+      <time class="rb-clock" id="boardClock" aria-label="Current time">--:--:--</time>
+      <button
+        class="rb-icon-button"
+        id="fullscreenBtn"
+        type="button"
+        title="Full screen (F)"
+        aria-label="Enter full screen"
+      >
+        <i class="bi bi-arrows-fullscreen" id="fullscreenIcon" aria-hidden="true"></i>
+      </button>
+    </div>
+  </header>
+
+  <section class="rb-summary" aria-label="Count summary">
+    <div class="rb-stat">
+      <span class="rb-stat-value" id="ballotsAccepted">{{ board.totals.ballots_accepted }}</span>
+      <span class="rb-stat-label">Ballots counted</span>
+    </div>
+    <div class="rb-stat">
+      <span class="rb-stat-value" id="positionCount">{{ board.totals.positions }}</span>
+      <span class="rb-stat-label">Positions</span>
+    </div>
+    <div class="rb-stat">
+      <span class="rb-stat-value" id="candidateCount">{{ board.totals.candidates }}</span>
+      <span class="rb-stat-label">Candidates</span>
+    </div>
+    <div class="rb-stat">
+      <span class="rb-state-pill" id="statePill" data-tone="{{ board.state_tone }}">{{ board.state_label }}</span>
+      <span class="rb-stat-label">Election status</span>
+    </div>
+  </section>
+
+  <section class="rb-positions" id="positionsGrid" aria-label="Candidates by position">
+    {% for position in board.positions %}
+      <section class="rb-position" data-position-id="{{ position.id }}">
+        <header class="rb-position-head">
+          <div class="rb-position-title">
+            <span class="rb-position-number">{{ forloop.counter|stringformat:"02d" }}</span>
+            <h2>{{ position.title }}</h2>
+          </div>
+          <span class="rb-position-meta">
+            <strong data-position-total>{{ position.total_votes }}</strong> votes counted{% if position.max_choices > 1 %} · {{ position.max_choices }} picks{% endif %}
+          </span>
+        </header>
+        <div class="rb-candidates" data-candidate-list>
+          {% for candidate in position.candidates %}
+            <article
+              class="rb-candidate{% if candidate.leading %} is-leading{% endif %}"
+              data-candidate-id="{{ candidate.id }}"
+              aria-label="{{ candidate.name }}, {{ candidate.percent|floatformat:1 }} percent"
+            >
+              <span class="rb-rank" data-rank>{{ candidate.rank|stringformat:"02d" }}</span>
+              <div class="rb-photo">
+                {% if candidate.photo_url %}
+                  <img
+                    src="{{ candidate.photo_url }}"
+                    alt=""
+                    loading="lazy"
+                    onerror="this.style.display='none'; this.parentElement.querySelector('.rb-initials').hidden=false;"
+                  >
+                  <span class="rb-initials" hidden>{{ candidate.initials }}</span>
+                {% else %}
+                  <span class="rb-initials">{{ candidate.initials }}</span>
+                {% endif %}
+              </div>
+              <div class="rb-candidate-body">
+                <div class="rb-candidate-top">
+                  <span class="rb-name" title="{{ candidate.name }}">{{ candidate.name }}</span>
+                  <span class="rb-leading" data-leading {% if not candidate.leading %}hidden{% endif %}>
+                    <i class="bi bi-star-fill" aria-hidden="true"></i>
+                    <span>Leading</span>
+                  </span>
+                  <span class="rb-tied" data-tied {% if not candidate.tied %}hidden{% endif %}>Tied</span>
+                </div>
+                <div class="rb-bar" aria-hidden="true">
+                  <span class="rb-bar-fill" data-bar style="width: {{ candidate.percent }}%;"></span>
+                </div>
+                <div class="rb-candidate-foot">
+                  <span><strong data-votes>{{ candidate.votes }}</strong> votes</span>
+                </div>
+              </div>
+              <div class="rb-share">
+                <span data-percent>{{ candidate.percent|floatformat:1 }}</span><span class="rb-share-sym">%</span>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% empty %}
+      <div class="rb-board-empty">
+        <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+        <strong>No positions are on this ballot yet.</strong>
+        <span>The board will populate when the election configuration is ready.</span>
+      </div>
+    {% endfor %}
+  </section>
+
+  <footer class="rb-footer">
+    <div class="rb-health" id="health" data-status="{{ board.health.status }}" role="status" aria-live="polite">
+      <span class="rb-health-dot" aria-hidden="true"></span>
+      <strong data-health-label>{{ board.health.label }}</strong>
+      <span class="rb-health-detail" data-health-detail>{{ board.health.detail }}</span>
+    </div>
+    <div class="rb-footer-meta">
+      <span title="Ballot box sequence"><i class="bi bi-archive" aria-hidden="true"></i>Box #<span id="boxSeq">{{ board.health.box_seq }}</span></span>
+      <span title="Last accepted ballot"><i class="bi bi-inbox" aria-hidden="true"></i>Last ballot <span id="lastBallot">{{ board.health.last_ballot_label }}</span></span>
+      <span title="Last successful refresh"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span id="lastUpdated">just now</span></span>
+      <span class="rb-aggregate">Aggregate totals only</span>
+    </div>
+  </footer>
+</div>
+
+{{ board|json_script:"boardSeed" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    "use strict";
+
+    const root = document.getElementById("resultsBoard");
+    if (!root) return;
+
+    const seedNode = document.getElementById("boardSeed");
+    const dataUrl = root.dataset.dataUrl;
+    const fingerprint = root.dataset.fingerprint;
+    const refreshMs = Math.max(1000, Number(root.dataset.refreshMs) || 3000);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const clock = document.getElementById("boardClock");
+    const liveBadge = document.getElementById("liveBadge");
+    const liveLabel = document.getElementById("liveLabel");
+    const statePill = document.getElementById("statePill");
+    const ballotsAccepted = document.getElementById("ballotsAccepted");
+    const positionCount = document.getElementById("positionCount");
+    const candidateCount = document.getElementById("candidateCount");
+    const health = document.getElementById("health");
+    const healthLabel = health.querySelector("[data-health-label]");
+    const healthDetail = health.querySelector("[data-health-detail]");
+    const boxSeq = document.getElementById("boxSeq");
+    const lastBallot = document.getElementById("lastBallot");
+    const lastUpdated = document.getElementById("lastUpdated");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    const fullscreenIcon = document.getElementById("fullscreenIcon");
+
+    const candidateNodes = new Map();
+    document.querySelectorAll(".rb-candidate").forEach(function (node) {
+      candidateNodes.set(node.dataset.candidateId, node);
+    });
+    const panelNodes = new Map();
+    document.querySelectorAll("[data-position-id]").forEach(function (node) {
+      panelNodes.set(node.dataset.positionId, node);
+    });
+
+    const integerFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    let lastSuccess = Date.now();
+    let failures = 0;
+    let offline = false;
+    let timer = null;
+    let inFlight = false;
+
+    function setText(node, value) {
+      if (!node) return;
+      const next = String(value);
+      if (node.textContent !== next) node.textContent = next;
+    }
+
+    function formatInteger(value) {
+      return integerFormat.format(Number(value) || 0);
+    }
+
+    function formatPercent(value) {
+      const number = Number(value);
+      return (Number.isFinite(number) ? number : 0).toFixed(1);
+    }
+
+    function setLiveMode(data) {
+      const mode = data.is_open
+        ? "open"
+        : data.is_final
+          ? "certified"
+          : data.state_tone;
+      liveBadge.dataset.mode = mode;
+      setText(
+        liveLabel,
+        data.is_open ? "Live counting" : data.is_final ? "Final results" : data.state_label
+      );
+      statePill.dataset.tone = data.state_tone;
+      setText(statePill, data.state_label);
+    }
+
+    function reorderCandidates(list, orderedIds) {
+      if (!list || reducedMotion) {
+        if (list) orderedIds.forEach(function (id) {
+          const node = candidateNodes.get(id);
+          if (node && node.parentElement === list) list.appendChild(node);
+        });
+        return;
+      }
+
+      const before = new Map();
+      Array.from(list.children).forEach(function (node) {
+        before.set(node.dataset.candidateId, node.getBoundingClientRect());
+      });
+
+      orderedIds.forEach(function (id) {
+        const node = candidateNodes.get(id);
+        if (node && node.parentElement === list) list.appendChild(node);
+      });
+
+      Array.from(list.children).forEach(function (node) {
+        const first = before.get(node.dataset.candidateId);
+        if (!first) return;
+        const last = node.getBoundingClientRect();
+        const dx = first.left - last.left;
+        const dy = first.top - last.top;
+        if (!dx && !dy) return;
+        if (typeof node.animate !== "function") return;
+        node.animate(
+          [
+            { transform: "translate(" + dx + "px, " + dy + "px)" },
+            { transform: "translate(0, 0)" },
+          ],
+          { duration: 420, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" }
+        );
+      });
+    }
+
+    function applyBoard(data) {
+      if (!data || typeof data !== "object") return;
+      if (data.fingerprint && data.fingerprint !== fingerprint) {
+        window.location.reload();
+        return;
+      }
+
+      setLiveMode(data);
+      setText(ballotsAccepted, formatInteger(data.totals.ballots_accepted));
+      setText(positionCount, formatInteger(data.totals.positions));
+      setText(candidateCount, formatInteger(data.totals.candidates));
+
+      (data.positions || []).forEach(function (position) {
+        const panel = panelNodes.get(position.id);
+        if (!panel) return;
+
+        setText(
+          panel.querySelector("[data-position-total]"),
+          formatInteger(position.total_votes)
+        );
+
+        const list = panel.querySelector("[data-candidate-list]");
+        (position.candidates || []).forEach(function (candidate) {
+          const node = candidateNodes.get(candidate.id);
+          if (!node) return;
+
+          node.classList.toggle("is-leading", Boolean(candidate.leading));
+          node.setAttribute(
+            "aria-label",
+            candidate.name + ", " + formatPercent(candidate.percent) + " percent"
+          );
+          setText(node.querySelector("[data-votes]"), formatInteger(candidate.votes));
+          setText(node.querySelector("[data-rank]"), String(candidate.rank).padStart(2, "0"));
+          setText(node.querySelector("[data-percent]"), formatPercent(candidate.percent));
+
+          const bar = node.querySelector("[data-bar]");
+          if (bar) {
+            const width = Math.max(0, Math.min(100, Number(candidate.percent) || 0));
+            bar.style.width = width + "%";
+          }
+
+          const leading = node.querySelector("[data-leading]");
+          if (leading) leading.hidden = !candidate.leading;
+          const tied = node.querySelector("[data-tied]");
+          if (tied) tied.hidden = !candidate.tied;
+        });
+
+        reorderCandidates(
+          list,
+          (position.candidates || []).map(function (candidate) { return candidate.id; })
+        );
+      });
+
+      const healthData = data.health || {};
+      health.dataset.status = healthData.status || "idle";
+      setText(healthLabel, healthData.label || "System status unavailable");
+      setText(healthDetail, healthData.detail || "");
+      setText(boxSeq, healthData.box_seq ?? 0);
+      setText(lastBallot, healthData.last_ballot_label || "No ballots yet");
+      lastSuccess = Date.now();
+      failures = 0;
+      offline = false;
+      updateRelative();
+    }
+
+    function updateRelative() {
+      if (offline) return;
+      const seconds = Math.max(0, Math.floor((Date.now() - lastSuccess) / 1000));
+      setText(lastUpdated, seconds < 2 ? "just now" : seconds + "s ago");
+    }
+
+    function tickClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, "0");
+      const minutes = String(now.getMinutes()).padStart(2, "0");
+      const seconds = String(now.getSeconds()).padStart(2, "0");
+      setText(clock, hours + ":" + minutes + ":" + seconds);
+    }
+
+    function markOffline(message) {
+      offline = true;
+      health.dataset.status = "offline";
+      setText(healthLabel, "Connection lost");
+      setText(healthDetail, message || "Retrying automatically…");
+      setText(lastUpdated, "offline");
+    }
+
+    function schedule(delay) {
+      window.clearTimeout(timer);
+      if (document.hidden) return;
+      timer = window.setTimeout(refresh, delay ?? refreshMs);
+    }
+
+    async function refresh() {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      const controller = new AbortController();
+      const abortTimer = window.setTimeout(function () { controller.abort(); }, 12000);
+      try {
+        const response = await fetch(dataUrl, {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const httpError = new Error("HTTP " + response.status);
+          httpError.status = response.status;
+          throw httpError;
+        }
+        applyBoard(await response.json());
+      } catch (error) {
+        failures += 1;
+        if (error && error.status === 403) {
+          markOffline("Access expired · sign in again and reload this display");
+        } else if (error && error.name === "AbortError") {
+          markOffline("Count request timed out · retrying");
+        } else {
+          markOffline("Retrying automatically…");
+        }
+      } finally {
+        window.clearTimeout(abortTimer);
+        inFlight = false;
+        const backoff = Math.min(15000, refreshMs * Math.min(4, failures + 1));
+        schedule(failures ? backoff : refreshMs);
+      }
+    }
+
+    function updateFullscreenUi() {
+      const active = Boolean(document.fullscreenElement);
+      fullscreenIcon.className = active
+        ? "bi bi-fullscreen-exit"
+        : "bi bi-arrows-fullscreen";
+      fullscreenBtn.title = active ? "Exit full screen (F)" : "Full screen (F)";
+      fullscreenBtn.setAttribute(
+        "aria-label",
+        active ? "Exit full screen" : "Enter full screen"
+      );
+    }
+
+    fullscreenBtn.addEventListener("click", function () {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(function () {});
+      } else if (root.requestFullscreen) {
+        root.requestFullscreen().catch(function () {});
+      }
+    });
+
+    document.addEventListener("fullscreenchange", updateFullscreenUi);
+    document.addEventListener("keydown", function (event) {
+      if (event.key.toLowerCase() !== "f") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      event.preventDefault();
+      fullscreenBtn.click();
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) refresh();
+    });
+
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", function () {
+      markOffline("Device is offline · retrying");
+    });
+
+    if (seedNode) {
+      try {
+        applyBoard(JSON.parse(seedNode.textContent));
+      } catch (error) {
+        /* Server-rendered values remain usable if the seed cannot be parsed. */
+      }
+    }
+
+    tickClock();
+    window.setInterval(tickClock, 1000);
+    window.setInterval(updateRelative, 1000);
+    schedule(refreshMs);
+  })();
+</script>
+{% endblock %}

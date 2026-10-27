@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Overrides log · VoteSys{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <div class="page-head">
+    <h1><i class="bi bi-exclamation-octagon"></i> Overrides log</h1>
+    <p class="sub">
+      Every emergency override and governance-policy change, newest first.
+      Overrides supersede the four-eyes control on purpose and are recorded with
+      the actor, the documented reason, the before/after state and the
+      consequences — this ledger is the accountability trail for that authority.
+    </p>
+  </div>
+
+  <section class="inline-section">
+    <h2>Emergency lifecycle overrides</h2>
+    {% if override_events %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>When</th><th>Actor</th><th>Election</th><th>Transition</th><th>Four-eyes bypassed</th><th>Reason</th></tr>
+          </thead>
+          <tbody>
+            {% for ev in override_events %}
+              <tr>
+                <td>{{ ev.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ ev.actor_label|default:"—" }}</td>
+                <td>{% if ev.election %}<a href="{% url 'election_audit' ev.election.pk %}">{{ ev.election.title }}</a>{% else %}—{% endif %}</td>
+                <td><code>{{ ev.details.from }} &rarr; {{ ev.details.to }}</code></td>
+                <td>{% if ev.details.dual_control_bypassed %}<span class="badge badge-warning">yes ({{ ev.details.approval_kind }})</span>{% else %}<span class="badge badge-closed">no</span>{% endif %}</td>
+                <td>{{ ev.reason|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card empty-state">
+        <span class="empty-icon"><i class="bi bi-shield-check"></i></span>
+        <h2>No emergency overrides recorded</h2>
+        <p class="hint">The four-eyes procedure has never been superseded. That is the expected state.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="inline-section">
+    <h2>Governance policy changes</h2>
+    {% if governance_events %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>When</th><th>Actor</th><th>Election</th><th>Before</th><th>After</th></tr>
+          </thead>
+          <tbody>
+            {% for ev in governance_events %}
+              <tr>
+                <td>{{ ev.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ ev.actor_label|default:"—" }}</td>
+                <td>{% if ev.election %}<a href="{% url 'election_config' ev.election.pk %}">{{ ev.election.title }}</a>{% else %}—{% endif %}</td>
+                <td><span class="meta">{{ ev.details.before.certify_label }} / {{ ev.details.before.publish_label }}</span></td>
+                <td><span class="meta">{{ ev.details.after.certify_label }} / {{ ev.details.after.publish_label }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="hint">No per-election governance policy has been changed.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

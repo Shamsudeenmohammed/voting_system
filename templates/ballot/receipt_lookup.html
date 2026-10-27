@@ -1,28 +1,64 @@
-{% extends "base.html" %}
+{% extends "ballot/base.html" %}
 {% block title %}Receipt verification · {{ election.title }}{% endblock %}
 {% block content %}
-<div class="login-page">
-  <div class="login-card">
-    <h1>Verify a ballot receipt</h1>
-    <p class="hint">Receipt verification confirms that a ballot was accepted — it never
-      reveals who cast it or what it contains.</p>
-    <form method="get">
-      <div class="form-group">
-        <label for="id_code">Receipt code</label>
-        <input class="input" type="text" name="code" id="id_code" value="{{ code }}" autocomplete="off">
-      </div>
-      <button class="btn btn-primary btn-block" type="submit">Verify</button>
-    </form>
-    {% if code %}
-      {% if found %}
-        <p class="check-circle">Accepted: this ballot is in the box
-          (sequence #{{ found.box_seq }}, accepted {{ found.accepted_at|date:"Y-m-d H:i" }}).</p>
-        <p class="hint">Ballot hash: <code>{{ found.ballot_hash }}</code></p>
-      {% else %}
-        <p class="messages error">No ballot with this receipt code exists in this
-          election. Check the code and try again.</p>
-      {% endif %}
-    {% endif %}
+<style>
+  /* ---- Receipt lookup ---- */
+  .lookup-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    background: linear-gradient(160deg, var(--primary-light) 0%, #e0e7ff 100%);
+    color: var(--primary);
+    border: 1px solid #c7d2fe;
+  }
+  .verify-result { text-align: left; }
+  .verify-result .vr-head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+  }
+  .verify-result.ok { background: var(--success-bg); border-color: #86efac; }
+  .verify-result.ok .vr-head { color: #065f46; }
+  .verify-result.ok p { color: #065f46; }
+  .verify-result code { background: rgb(6 95 70 / 10%); padding: 0.15rem 0.45rem; border-radius: var(--radius-xs); word-break: break-all; }
+</style>
+
+<div class="login-card">
+  <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start;">
+    <div class="lookup-icon"><i class="bi bi-upc-scan"></i></div>
+    <h1>Verify a Ballot Receipt</h1>
+    <p class="hint">Receipt verification confirms that a ballot was accepted — it never reveals who cast it or what it contains.</p>
   </div>
+  <form method="get" style="display: flex; flex-direction: column; gap: 1rem;">
+    <div class="form-group">
+      <label for="id_code"><i class="bi bi-upc"></i> Receipt code</label>
+      <input class="input" type="text" name="code" id="id_code" value="{{ code }}" autocomplete="off" placeholder="Enter receipt code">
+    </div>
+    <button class="btn btn-primary btn-block" type="submit"><i class="bi bi-search"></i> Verify</button>
+  </form>
+  {% if code %}
+    {% if found %}
+      <div class="notice notice-success verify-result ok" style="flex-direction: column; align-items: flex-start; gap: 0.2rem;">
+        <div class="vr-head"><i class="bi bi-check-circle"></i> Receipt Verified</div>
+        <p style="font-size: 0.85rem; margin: 0;">Accepted: this ballot is in the box (sequence #{{ found.box_seq }}, accepted {{ found.accepted_at|date:"Y-m-d H:i" }}).</p>
+        <p style="color: #065f46; font-size: 0.8rem; margin: 0.35rem 0 0;">Ballot hash: <code>{{ found.ballot_hash }}</code></p>
+      </div>
+    {% else %}
+      <div class="message error">
+        <i class="bi bi-x-circle"></i>
+        <span>No ballot with this receipt code exists in this election. Check the code and try again.</span>
+      </div>
+    {% endif %}
+  {% endif %}
+  <p class="hint" style="text-align: center; margin: 0;">
+    <a href="{% url 'home' %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to elections</a>
+  </p>
 </div>
 {% endblock %}

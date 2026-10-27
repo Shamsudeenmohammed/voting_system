@@ -1,60 +1,151 @@
 {% extends "base.html" %}
 {% block title %}Voters · {{ election.title }}{% endblock %}
 {% block content %}
+<style>
+  /* ---- Voter registry ---- */
+  .registry-head { display: flex; flex-direction: column; gap: 0.55rem; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.35rem; align-items: start; }
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .panel-title i { color: var(--primary); }
+  .voted-yes { color: var(--success); font-weight: 650; display: inline-flex; align-items: center; gap: 0.3rem; }
+  .voted-no { color: var(--text-tertiary); }
+
+  @media (max-width: 900px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  .template-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    padding: 0.7rem 0.9rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+  .template-bar i { color: var(--primary); }
+  .card input[type="file"] {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    max-width: 100%;
+  }
+  .card input[type="file"]::file-selector-button {
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm, 6px);
+    padding: 0.35rem 0.75rem;
+    margin-right: 0.6rem;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+  .card input[type="file"]::file-selector-button:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+</style>
+
 <div class="admin-content">
-  <h1>Voter registry — {{ election.title }}</h1>
-  <p><span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
-     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Back to configuration</a></p>
+  <div class="registry-head page-head">
+    <h1>Voter Registry — {{ election.title }}</h1>
+    <div class="meta-row">
+      <span class="badge {% if election.state_badge %}{{ election.state_badge }}{% else %}badge-closed{% endif %}">{{ election.get_state_display }}</span>
+      <a href="{% url 'election_config' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to configuration</a>
+    </div>
+  </div>
 
   <section class="card inline-section">
-    <h2>Registry ({{ voters|length }})</h2>
+    <h2 class="panel-title"><i class="bi bi-people"></i> Registry ({{ voters|length }})</h2>
     {% if not registration_open %}
-      <p class="hint">Registration is closed; the registry is frozen. Credentials can
-        still be revoked for voters who have not voted.</p>
+      <div class="notice notice-info"><i class="bi bi-info-circle"></i> Registration is closed; the registry is frozen. Credentials can still be revoked for voters who have not voted.</div>
     {% endif %}
-    <table>
-      <thead><tr><th>Voter ID</th><th>Name</th><th>Unit</th><th>Voted</th><th></th></tr></thead>
-      <tbody>
-        {% for v in voters %}
-          <tr>
-            <td>{{ v.voter_id|default:"—" }}</td>
-            <td>{{ v.full_name }}</td>
-            <td>{{ v.organization_unit }}</td>
-            <td>{{ v.has_voted|yesno:"yes,no" }}</td>
-            <td class="action-links">
-              {% if not v.has_voted %}
-                <form method="post" action="{% url 'voter_revoke' election.pk v.pk %}">
-                  {% csrf_token %}
-                  <button class="btn btn-sm btn-outline" type="submit">Revoke credentials</button>
-                </form>
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="5" class="hint">No voters registered yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th data-sortable>Voter ID</th><th data-sortable>Name</th><th data-sortable>Unit</th><th data-sortable>Voted</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for v in voters %}
+            <tr>
+              <td><code>{{ v.voter_id|default:"—" }}</code></td>
+              <td><strong>{{ v.full_name }}</strong></td>
+              <td>{{ v.organization_unit }}</td>
+              <td>
+                {% if v.has_voted %}
+                  <span class="voted-yes"><i class="bi bi-check-circle"></i> yes</span>
+                {% else %}
+                  <span class="voted-no">no</span>
+                {% endif %}
+              </td>
+              <td class="action-links">
+                {% if not v.has_voted %}
+                  <form method="post" action="{% url 'voter_revoke' election.pk v.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline" type="submit"><i class="bi bi-x-circle"></i> Revoke credentials</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><span class="hint">No voters registered yet.</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
 
-  {% if registration_open %}
-    <section class="card inline-section">
-      <h2>Add a voter</h2>
-      <form method="post" action="{% url 'voter_add' election.pk %}">
-        {% csrf_token %}
-        {{ voter_form.as_div }}
-        <button class="btn btn-sm btn-primary" type="submit">Register voter</button>
-      </form>
-    </section>
+  <div class="template-bar">
+    <i class="bi bi-file-earmark-spreadsheet"></i>
+    <span>Register template:</span>
+    <a class="btn btn-sm btn-outline" href="{% url 'voter_registry_template' election.pk %}"><i class="bi bi-filetype-csv"></i> Download CSV</a>
+    <a class="btn btn-sm btn-outline" href="{% url 'voter_registry_template' election.pk %}?format=xlsx"><i class="bi bi-file-earmark-excel"></i> Download XLSX</a>
+    <span class="hint">Columns: voter_id, full_name (at least one required), email, unit. Keep the header row.</span>
+  </div>
 
-    <section class="card inline-section">
-      <h2>Bulk upload (CSV)</h2>
-      <form method="post" action="{% url 'voter_bulk_add' election.pk %}">
-        {% csrf_token %}
-        {{ bulk_form.as_div }}
-        <button class="btn btn-sm btn-primary" type="submit">Upload voters</button>
-      </form>
-    </section>
+  {% if registration_open %}
+    <div class="two-col">
+      <section class="card inline-section">
+        <h2 class="panel-title"><i class="bi bi-person-plus"></i> Add a Voter</h2>
+        <form method="post" action="{% url 'voter_add' election.pk %}" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          {% csrf_token %}
+          {{ voter_form.as_div }}
+          <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-circle"></i> Register voter</button></div>
+        </form>
+      </section>
+
+      <section class="card inline-section">
+        <h2 class="panel-title"><i class="bi bi-cloud-upload"></i> Bulk Upload (paste CSV)</h2>
+        <form method="post" action="{% url 'voter_bulk_add' election.pk %}" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          {% csrf_token %}
+          {{ bulk_form.as_div }}
+          <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-upload"></i> Upload voters</button></div>
+        </form>
+      </section>
+
+      <section class="card inline-section">
+        <h2 class="panel-title"><i class="bi bi-file-earmark-arrow-up"></i> Upload Register File (CSV / XLSX)</h2>
+        <form method="post" action="{% url 'voter_file_add' election.pk %}" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          {% csrf_token %}
+          {{ upload_form.as_div }}
+          <div><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-upload"></i> Upload &amp; register voters</button></div>
+        </form>
+        <p class="hint" style="margin: 0.75rem 0 0;">
+          Download the template above, fill in your voters, then choose the file here.
+          Existing voter IDs in this election are skipped; maximum 5,000 rows per upload.
+        </p>
+      </section>
+    </div>
   {% endif %}
 </div>
 {% endblock %}

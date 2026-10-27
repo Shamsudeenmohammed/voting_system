@@ -78,6 +78,35 @@ docker compose up -d --build  # db + redis + web + worker
 (`CompressedManifestStaticFilesStorage`), so no separate web-server alias is
 required.
 
+### Media files (candidate passport photographs)
+
+Uploaded candidate photographs are stored on disk under `MEDIA_ROOT`
+(`./media`, persisted in the `media` volume of `docker-compose.yml`).
+
+* `SERVE_MEDIA` controls whether Django serves `/media/` itself.  It defaults
+  to `DEBUG` (on for local development).  The docker-compose stack sets
+  `SERVE_MEDIA=true` so photographs work out of the box without a proxy.
+* **Production:** put nginx (or your TLS terminator) in front of gunicorn and
+  serve `/media/` directly from the `media` volume (alias or bind mount), then
+  set `SERVE_MEDIA=false` so Django does not serve files itself.  Example nginx
+  location:
+
+  ```nginx
+  location /media/ {
+      alias /app/media/;        # same path as the `media` volume
+      expires 7d;
+      add_header Cache-Control "public";
+  }
+  ```
+
+* **Persistence/backup:** the `media` volume must be backed up together with
+  the database and the `secrets`/`credentials` volumes — photographs are
+  referenced by URL in the ballot and management screens, and re-uploading
+  them after a restore is impractical once elections are locked.
+* `CANDIDATE_PHOTO_MAX_UPLOAD_MB` (default 5) caps the size of a single
+  photograph upload; the server validates real image content (JPEG/PNG/WebP)
+  regardless of the client-supplied filename or content type.
+
 Without Docker:
 
 ```powershell
@@ -96,16 +125,20 @@ gunicorn voting_system.wsgi:application --bind 0.0.0.0:8000 --workers 3
    live copy (`docs/OPERATIONS.md`).
 2. Create the first back-office account:
    `python manage.py createsuperuser` — it can log in at `/watch/` (the admin
-   is deliberately not mounted at `/admin/`).
-3. Create organizations and memberships.  **There is no org-management UI**;
-   use the Django ORM/shell (see the status table in `README.md`).
+   is deliberately not mounted at `/admin/`, and is themed with django-jazzmin;
+   `collectstatic` gathers the theme's assets along with the rest).
+3. Create organizations and memberships from the UI at
+   `/manage/organizations/` (organization + people & access consoles), or with
+   the Django ORM/shell.  Creating an organization requires a system
+   administrator; `org_admin`s manage within their own subtree.
 4. Verify the deployment:
    * `GET /` returns the public election list (200).
    * `GET /elections/<any-election-id>/live/` returns JSON (health check
      with a real election; `/` itself is enough for a basic probe).
    * `GET /watch/login/` returns the admin login page.
 5. After every deploy, run an audit-chain verification for one election
-   (dashboard → election → Audit) to confirm the chain still validates.
+   (dashboard → election → Audit, or the tenant-wide **Security & audit**
+   overview) to confirm the chain still validates.
 
 ## 5. TLS and proxying
 
@@ -118,8 +151,9 @@ before you are sure all subdomains serve HTTPS.
 ## 6. Backups and disaster recovery
 
 See `docs/OPERATIONS.md` for the backup set that actually preserves
-decryptability (database + `secrets/` + `private/credentials/`), restore
-steps, and the reconciliation/certification runbook.
+decryptability (database + `secrets/` + `private/credentials/` + the `media`
+volume with candidate photographs), restore steps, and the
+reconciliation/certification runbook.
 
 ## 7. Known deployment limitations
 

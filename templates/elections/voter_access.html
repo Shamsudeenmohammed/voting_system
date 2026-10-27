@@ -1,31 +1,101 @@
 {% extends "base.html" %}
 {% block title %}Vote · {{ election.title }}{% endblock %}
 {% block content %}
-<div class="login-page">
-  <div class="login-card">
-    <h1>{{ election.title }}</h1>
-    {% if issued and token %}
-      <h2>Your voting credential</h2>
-      <p class="hint">This credential grants <strong>one</strong> ballot and is shown
-        exactly once. Store it securely, then open your ballot:</p>
-      <div class="token-display">{{ token }}</div>
-      <p><a class="btn btn-primary btn-block" href="{{ ballot_url }}">Open my ballot</a></p>
-      <p class="hint">Anyone holding this credential can vote in your place until it is
-        used — do not share it. Your selections can never be linked back to you.</p>
-    {% else %}
-      <p class="hint">Enter the voter ID you were registered with. You will receive a
-        single-use voting credential for this election.</p>
-      <form method="post">
-        {% csrf_token %}
-        <div class="form-group">
-          <label for="id_voter_id">Voter ID</label>
-          <input class="input" type="text" name="voter_id" id="id_voter_id"
-                 autocomplete="off" autofocus required>
-        </div>
-        <button class="btn btn-primary btn-block" type="submit">Request voting credential</button>
-      </form>
-    {% endif %}
-    <p class="hint"><a href="{% url 'election_detail' election.pk %}">&larr; Back to election</a></p>
+<style>
+  /* ---- Voter access / credential ---- */
+  .vote-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-wrap: wrap;
+  }
+  .vote-steps .step { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .vote-steps .step i { font-size: 1.05rem; }
+  .vote-steps .step.active { color: var(--primary); }
+  .vote-steps .step.done { color: var(--success); }
+  .vote-steps .sep { color: var(--border-color-strong); }
+
+  .cred-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.7rem;
+    background: linear-gradient(160deg, var(--primary-hover) 0%, var(--primary-dark) 100%);
+    color: #fff;
+    box-shadow: 0 14px 30px -10px rgb(79 70 229 / 55%);
+  }
+  .token-wrap { position: relative; }
+  .token-wrap .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; }
+
+  @media (max-width: 480px) {
+    .vote-steps { font-size: 0.66rem; }
+  }
+</style>
+
+<div class="login-card">
+  <div class="vote-steps" aria-hidden="true">
+    <span class="step {% if issued %}done{% else %}active{% endif %}"><i class="bi bi-person-check"></i> Identify</span>
+    <span class="sep"><i class="bi bi-chevron-right"></i></span>
+    <span class="step {% if issued %}active{% else %}{% endif %}"><i class="bi bi-key"></i> Credential</span>
+    <span class="sep"><i class="bi bi-chevron-right"></i></span>
+    <span class="step"><i class="bi bi-check2-square"></i> Ballot</span>
   </div>
+
+  {% if message and not issued %}
+    <div class="message {% if status == 'active_token' %}info{% else %}error{% endif %}" style="margin-bottom: 1rem;">
+      <i class="bi bi-info-circle"></i>
+      <span>{{ message }}</span>
+    </div>
+  {% endif %}
+
+  {% if issued and token %}
+    <div style="display: flex; flex-direction: column; gap: 0.6rem; align-items: center; text-align: center;">
+      <div class="cred-icon"><i class="bi bi-key"></i></div>
+      <h2>Voting Credential Issued</h2>
+      <p class="hint">This credential grants <strong>one</strong> ballot and is shown exactly once. Provide it securely to the voter.</p>
+    </div>
+    <div class="token-wrap">
+      <div class="token-display" id="voterToken">{{ token }}</div>
+      <button type="button" class="copy-btn" data-copy="{{ token }}" aria-label="Copy credential"><i class="bi bi-copy"></i></button>
+    </div>
+    <p class="hint" style="text-align: center; max-width: 360px;">
+      The voter must enter this credential <strong>along with their Voter ID</strong> at the login page.
+    </p>
+    <a class="btn btn-primary btn-block" href="{% url 'voter_login' election.pk %}"><i class="bi bi-box-arrow-in-right"></i> Go to voter login page</a>
+    <div class="notice notice-warning">
+      <i class="bi bi-exclamation-triangle"></i>
+      <div>
+        <strong>Security Notice</strong><br>
+        Anyone holding this credential can vote in your place until it is used — do not share it. Your selections can never be linked back to you.
+      </div>
+    </div>
+  {% else %}
+    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+      <h2>Issue Voting Credential</h2>
+      <p class="hint">Enter the voter ID to generate a single-use voting credential for this election.</p>
+    </div>
+    <form method="post" style="display: flex; flex-direction: column; gap: 1rem;">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="id_voter_id"><i class="bi bi-person-vcard"></i> Voter ID</label>
+        <input class="input" type="text" name="voter_id" id="id_voter_id"
+               autocomplete="off" autofocus required placeholder="Enter voter ID">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit"><i class="bi bi-key"></i> Issue voting credential</button>
+    </form>
+  {% endif %}
+  <p class="hint" style="text-align: center; margin: 0;">
+    <a href="{% url 'election_detail' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to election</a>
+  </p>
 </div>
 {% endblock %}

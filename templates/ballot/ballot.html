@@ -1,20 +1,303 @@
-{% extends "base.html" %}
+{% extends "ballot/base.html" %}
 {% block title %}Ballot · {{ election.title }}{% endblock %}
 {% block content %}
+<style>
+  /* ---- Ballot ---- */
+  .ballot-head {
+    background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-800) 60%, #23246b 100%);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--radius-xl);
+    padding: 1.75rem 2rem;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .ballot-head::after {
+    content: "";
+    position: absolute;
+    right: -60px;
+    top: -60px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgb(99 102 241 / 32%) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .ballot-head > * { position: relative; z-index: 1; }
+  .ballot-head h1 { font-size: clamp(1.25rem, 2.6vw, 1.6rem); font-weight: 750; letter-spacing: -0.03em; line-height: 1.2; margin: 0; }
+  .ballot-head p { color: rgb(226 232 240 / 85%); font-size: 0.875rem; max-width: 70ch; margin: 0; }
+
+  .ballot-progress-card {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 40;
+    background: rgb(255 255 255 / 92%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: 0.9rem 1.15rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .ballot-progress-card .progress-track {
+    flex: 1 1 160px;
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .ballot-progress-card .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary-hover) 0%, var(--primary-dark) 100%);
+    border-radius: 999px;
+    transition: width var(--transition-slow);
+  }
+  .ballot-progress-label { font-size: 0.8rem; font-weight: 650; color: var(--text-secondary); display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+  .ballot-progress-label i { color: var(--primary); }
+
+  .position-section { scroll-margin-top: 90px; }
+  .ballot-wizard .position-section { display: none; }
+  .ballot-wizard .position-section.active { display: block; }
+  .step-nav { display: flex; justify-content: space-between; gap: 0.75rem; margin: 1rem 0; }
+  .step-nav .btn { min-width: 120px; }
+  .position-count {
+    font-size: 0.75rem;
+    font-weight: 650;
+    color: var(--primary-dark);
+    background: var(--primary-light);
+    border: 1px solid #c7d2fe;
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .position-section.complete .position-count { background: var(--success-bg); color: #047857; border-color: #bbf7d0; }
+
+  /* ---- Passport photograph on ballot cards ---- */
+  .candidate-card .candidate-photo-frame {
+    position: relative;
+    width: 132px;
+    aspect-ratio: 3 / 4; /* consistent passport-photo ratio */
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: var(--transition-fast);
+  }
+  .candidate-card .candidate-photo-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* crop, never distort */
+    display: block;
+  }
+  .candidate-card .candidate-photo-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 750;
+    letter-spacing: 0.02em;
+    color: var(--primary-dark);
+    background: linear-gradient(160deg, var(--primary-light) 0%, #e0e7ff 100%);
+    user-select: none;
+  }
+  .candidate-card.selected .candidate-photo-frame { border-color: var(--primary); box-shadow: 0 0 0 2px rgb(99 102 241 / 25%); }
+  .candidate-card.selected .candidate-photo-fallback { background: linear-gradient(160deg, #6366f1 0%, var(--primary-dark) 100%); color: #fff; }
+
+  .candidate-card .ballot-number {
+    position: absolute;
+    left: 50%;
+    bottom: 0.45rem;
+    transform: translateX(-50%);
+    background: rgb(11 18 41 / 78%);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.16rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .candidate-card .candidate-position-meta {
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  /* Ballot card grid: 3 columns desktop / 2 tablet / 1 mobile. */
+  .candidate-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 1080px) { .candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .candidate-grid { grid-template-columns: minmax(0, 1fr); } }
+
+  .blank-row {
+    padding-top: 0.85rem;
+    border-top: 1px dashed var(--border-color-strong);
+  }
+  .blank-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 550;
+    padding: 0.45rem 0.6rem;
+    border-radius: 10px;
+    transition: var(--transition-fast);
+    user-select: none;
+  }
+  .blank-row label:hover { background: var(--warning-bg); color: #92400e; }
+  .blank-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--warning); }
+
+  .submit-dock {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 45;
+    background: rgb(255 255 255 / 94%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .submit-dock .dock-info { font-size: 0.82rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; }
+  .submit-dock .dock-info i { color: var(--primary); font-size: 1rem; }
+
+  /* Review modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(11 18 41 / 60%);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .modal-backdrop.open { opacity: 1; }
+  .modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-color);
+    width: 100%;
+    max-width: 520px;
+    max-height: min(80vh, 640px);
+    display: flex;
+    flex-direction: column;
+    transform: translateY(12px) scale(0.98);
+    transition: transform var(--transition);
+    overflow: hidden;
+  }
+  .modal-backdrop.open .modal { transform: translateY(0) scale(1); }
+  .modal-head {
+    padding: 1.25rem 1.5rem 0.85rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .modal-head h2 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  .modal-close {
+    border: none;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: var(--transition-fast);
+  }
+  .modal-close:hover { background: var(--danger-light); color: var(--danger); }
+  .modal-close:focus-visible { outline: none; box-shadow: var(--ring); }
+  .modal-body { padding: 1.15rem 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem; }
+  .review-position {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .review-position .rp-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); }
+  .review-position .rp-choice { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.45rem; }
+  .review-position .rp-choice i { color: var(--success); }
+  .review-position.blank .rp-choice { color: var(--warning); font-weight: 550; }
+  .review-position.unanswered .rp-choice { color: var(--text-muted); font-weight: 500; }
+  .modal-foot { padding: 1rem 1.5rem 1.35rem; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.65rem; }
+  .modal-foot .btn { width: 100%; }
+
+  @media (max-width: 768px) {
+    .ballot-head { padding: 1.35rem 1.25rem; border-radius: var(--radius-lg); }
+    .ballot-progress-card { position: static; }
+    .submit-dock { position: fixed; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; padding: 0.8rem 1rem; }
+    .submit-dock .dock-info { display: none; }
+    .submit-dock .btn { flex: 1; }
+    .ballot-form { padding-bottom: 5.5rem; }
+  }
+</style>
+
 <div class="admin-content">
-  <h1>Official ballot — {{ election.title }}</h1>
-  <p class="hint">Make your selections carefully: once submitted, your ballot is sealed
-    and cannot be changed. No one — including election administrators — can link any
-    ballot back to you.</p>
+  <div class="ballot-head">
+    <h1><i class="bi bi-check2-square"></i> Official Ballot — {{ election.title }}</h1>
+    <p>Make your selections carefully: once submitted, your ballot is sealed and cannot be changed. No one — including election administrators — can link any ballot back to you.</p>
+  </div>
 
-  {% if error %}<p class="messages error">{{ error }}</p>{% endif %}
+  {% if error %}
+    <div class="message error">
+      <i class="bi bi-x-circle"></i>
+      <span>{{ error }}</span>
+    </div>
+  {% endif %}
 
-  <form method="post" id="ballot-form">
+  <form method="post" id="ballot-form" class="ballot-form ballot-wizard" style="display: flex; flex-direction: column; gap: 1.25rem;">
     {% csrf_token %}
     <input type="hidden" name="submission_id" value="{{ submission_id }}">
 
+    <div class="ballot-progress-card" id="ballotProgress" role="status" aria-live="polite">
+      <span class="ballot-progress-label"><i class="bi bi-list-check"></i> <span id="progressText">0 of 0 positions answered</span></span>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="ballot-progress-label" id="selectionTotal"><i class="bi bi-check2-circle"></i> 0 selections</span>
+    </div>
+
     {% for row in rows %}
-      <section class="position-section card">
+      <section class="card position-section" data-position="{{ row.position.pk }}">
         <div class="position-header">
           <h2>{{ row.position.title }}
             <span class="hint">
@@ -24,15 +307,31 @@
                 choose one
               {% endif %}
             </span>
+            <span class="position-count" data-count-for="{{ row.position.pk }}">0 selected</span>
           </h2>
         </div>
         <div class="candidate-grid">
           {% for c in row.candidates %}
-            <label class="candidate-card candidate-check">
+            <label class="candidate-card candidate-check {% if c.pk in selected %}selected{% endif %}" tabindex="0">
               <input type="{% if row.config.max_choices > 1 %}checkbox{% else %}radio{% endif %}"
-                     name="{{ row.position.pk }}" value="{{ c.pk }}">
+                     name="{{ row.position.pk }}" value="{{ c.pk }}"
+                     onchange="handleSelection(this)">
+              <div class="check-circle"></div>
+              <div class="candidate-photo-frame">
+                {% if c.photo %}
+                  <img src="{{ c.photo.url }}"
+                       alt="Photograph of {{ c.full_name }}"
+                       loading="lazy"
+                       onerror="var p=this.parentElement; this.remove(); var fb=p.querySelector('.candidate-photo-fallback'); if (fb) fb.style.display='flex';">
+                  <span class="candidate-photo-fallback" style="display:none;">{{ c.initials }}</span>
+                {% else %}
+                  <span class="candidate-photo-fallback">{{ c.initials }}</span>
+                {% endif %}
+                <span class="ballot-number">#{{ forloop.counter }}</span>
+              </div>
               <div class="candidate-info">
                 <div class="candidate-name">{{ c.full_name }}</div>
+                <div class="candidate-position-meta"><i class="bi bi-person-badge"></i> {{ row.position.title }}</div>
                 {% if c.bio %}<div class="candidate-bio">{{ c.bio }}</div>{% endif %}
                 {% if c.manifesto %}<div class="hint">{{ c.manifesto|truncatechars:200 }}</div>{% endif %}
               </div>
@@ -42,26 +341,222 @@
           {% endfor %}
         </div>
         {% if allow_blank %}
-          <p class="hint"><label><input type="checkbox" name="__blank_{{ row.position.pk }}"
-             value="1" onclick="uncheckGroup('{{ row.position.pk }}', this)"> Leave this position blank</label></p>
+          <div class="blank-row">
+            <label>
+              <input type="checkbox" name="__blank_{{ row.position.pk }}" value="1" onclick="uncheckGroup('{{ row.position.pk }}', this)">
+              Leave this position blank
+            </label>
+          </div>
         {% endif %}
       </section>
     {% endfor %}
 
-    <button class="btn btn-primary btn-block" type="submit"
-            onclick="return confirm('Seal and submit your ballot? It cannot be changed afterwards.');">
-      Seal and submit my ballot
-    </button>
+    <div class="step-nav" id="stepNav">
+      <button type="button" class="btn btn-outline" id="prevStep" disabled><i class="bi bi-arrow-left"></i> Previous</button>
+      <button type="button" class="btn btn-primary" id="nextStep">Next <i class="bi bi-arrow-right"></i></button>
+    </div>
+
+    <div class="submit-dock">
+      <span class="dock-info"><i class="bi bi-shield-lock"></i> Your ballot is anonymous and cannot be changed once sealed.</span>
+      <button class="btn btn-primary" type="submit" id="sealBtn">
+        <i class="bi bi-shield-lock"></i> Seal and submit my ballot
+      </button>
+    </div>
   </form>
 </div>
-{% endblock %}
-{% block extra_js %}
+
 <script>
-function uncheckGroup(name, box) {
-  if (!box.checked) return;
-  document.querySelectorAll('input[name="' + name + '"]').forEach(function (el) {
-    if (el !== box) el.checked = false;
+function handleSelection(input) {
+  document.querySelectorAll('input[name="' + input.name + '"]').forEach(function (el) {
+    var card = el.closest('.candidate-card');
+    if (card) card.classList.toggle('selected', el.checked);
   });
+  if (typeof updateBallotProgress === 'function') updateBallotProgress();
 }
+
+function uncheckGroup(name, box) {
+  if (box.checked) {
+    document.querySelectorAll('input[name="' + name + '"]').forEach(function (el) {
+      if (el !== box && el.type !== 'hidden') {
+        el.checked = false;
+        var card = el.closest('.candidate-card');
+        if (card) card.classList.remove('selected');
+      }
+    });
+  }
+  if (typeof updateBallotProgress === 'function') updateBallotProgress();
+}
+
+(function () {
+  'use strict';
+  var form = document.getElementById('ballot-form');
+  if (!form) return;
+  var positionIds = Array.prototype.map.call(
+    form.querySelectorAll('.position-section[data-position]'),
+    function (s) { return s.getAttribute('data-position'); }
+  );
+  var sections = Array.prototype.slice.call(form.querySelectorAll('.position-section[data-position]'));
+  var currentStep = 0;
+  var prevBtn = document.getElementById('prevStep');
+  var nextBtn = document.getElementById('nextStep');
+  var stepNav = document.getElementById('stepNav');
+  var dock = form.querySelector('.submit-dock');
+
+  function showStep(idx) {
+    if (!sections.length) return;
+    currentStep = Math.max(0, Math.min(idx, sections.length - 1));
+    sections.forEach(function (sec, i) { sec.classList.toggle('active', i === currentStep); });
+    if (prevBtn) prevBtn.disabled = currentStep === 0;
+    if (nextBtn) nextBtn.innerHTML = currentStep === sections.length - 1
+      ? 'Review <i class="bi bi-check2"></i>'
+      : 'Next <i class="bi bi-arrow-right"></i>';
+    if (stepNav) stepNav.style.display = sections.length > 1 ? '' : 'none';
+    if (dock) dock.style.display = (!sections.length || currentStep === sections.length - 1) ? '' : 'none';
+  }
+  if (prevBtn) prevBtn.addEventListener('click', function () { showStep(currentStep - 1); window.scrollTo(0, 0); });
+  if (nextBtn) nextBtn.addEventListener('click', function () {
+    if (currentStep < sections.length - 1) { showStep(currentStep + 1); window.scrollTo(0, 0); }
+    else {
+      var seal = document.getElementById('sealBtn');
+      if (seal) seal.click();
+    }
+  });
+  showStep(0);
+
+  function getState() {
+    var state = {};
+    positionIds.forEach(function (pid) {
+      var inputs = form.querySelectorAll('input[name="' + pid + '"]');
+      var picked = [];
+      var blank = false;
+      inputs.forEach(function (el) {
+        if (el.type === 'checkbox' && el.name.indexOf('__blank_') === 0) { if (el.checked) blank = true; return; }
+        if (el.checked) {
+          var card = el.closest('.candidate-card');
+          var nameEl = card ? card.querySelector('.candidate-name') : null;
+          picked.push(nameEl ? nameEl.textContent.trim() : el.value);
+        }
+      });
+      state[pid] = { picked: picked, blank: blank };
+    });
+    return state;
+  }
+
+  window.updateBallotProgress = function () {
+    var answered = 0;
+    var totalSelections = 0;
+    positionIds.forEach(function (pid) {
+      var s = getState()[pid];
+      var isAnswered = s.picked.length > 0 || s.blank;
+      if (isAnswered) answered++;
+      totalSelections += s.picked.length;
+      var section = form.querySelector('.position-section[data-position="' + pid + '"]');
+      var counter = form.querySelector('[data-count-for="' + pid + '"]');
+      if (counter) counter.textContent = s.blank ? 'blank' : (s.picked.length + ' selected');
+      if (section) section.classList.toggle('complete', isAnswered);
+    });
+    var pct = positionIds.length ? Math.round((answered / positionIds.length) * 100) : 0;
+    var fill = document.getElementById('progressFill');
+    var text = document.getElementById('progressText');
+    var total = document.getElementById('selectionTotal');
+    if (fill) fill.style.width = pct + '%';
+    if (text) text.textContent = answered + ' of ' + positionIds.length + ' positions answered';
+    if (total) total.innerHTML = '<i class="bi bi-check2-circle"></i> ' + totalSelections + ' selection' + (totalSelections === 1 ? '' : 's');
+  };
+
+  /* Keyboard activation for candidate card labels */
+  form.querySelectorAll('.candidate-card.candidate-check').forEach(function (card) {
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        var input = card.querySelector('input');
+        if (input && document.activeElement === card) {
+          e.preventDefault();
+          input.checked = !input.checked;
+          handleSelection(input);
+        }
+      }
+    });
+  });
+
+  /* Review step before sealing */
+  var reviewOpen = false;
+  function buildReview() {
+    var wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-labelledby', 'reviewTitle');
+
+    var state = getState();
+    var rowsHtml = positionIds.map(function (pid) {
+      var section = form.querySelector('.position-section[data-position="' + pid + '"]');
+      var h2 = section ? section.querySelector('.position-header h2') : null;
+      var titleText = '';
+      if (h2) {
+        /* first text node of the heading is the position title */
+        var firstNode = h2.childNodes[0];
+        titleText = (firstNode && firstNode.nodeType === 3) ? firstNode.textContent.trim() : h2.textContent.trim();
+      }
+      var s = state[pid];
+      var cls = s.picked.length ? '' : (s.blank ? 'blank' : 'unanswered');
+      var icon = s.picked.length ? 'bi-check-circle-fill' : (s.blank ? 'bi-dash-circle' : 'bi-exclamation-circle');
+      var value = s.picked.length ? s.picked.join(', ') : (s.blank ? 'Left blank' : 'No selection');
+      return '<div class="review-position ' + cls + '">' +
+             '<span class="rp-title">' + titleText.replace(/choose up to \d+|choose one/g, '').trim() + '</span>' +
+             '<span class="rp-choice"><i class="bi ' + icon + '"></i> ' + value + '</span>' +
+             '</div>';
+    }).join('');
+
+    wrap.innerHTML =
+      '<div class="modal">' +
+        '<div class="modal-head">' +
+          '<div><h2 id="reviewTitle">Review your ballot</h2>' +
+          '<p class="hint" style="margin:0.25rem 0 0;">Confirm your choices below. Sealing is final.</p></div>' +
+          '<button type="button" class="modal-close" aria-label="Close review"><i class="bi bi-x-lg"></i></button>' +
+        '</div>' +
+        '<div class="modal-body">' + rowsHtml + '</div>' +
+        '<div class="modal-foot">' +
+          '<button type="button" class="btn btn-primary" data-confirm-seal><i class="bi bi-shield-lock"></i> Seal and submit — final</button>' +
+          '<button type="button" class="btn btn-outline" data-cancel-seal><i class="bi bi-arrow-left"></i> Go back and review choices</button>' +
+        '</div>' +
+      '</div>';
+    return wrap;
+  }
+
+  function closeModal(wrap) {
+    wrap.classList.remove('open');
+    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 220);
+    reviewOpen = false;
+  }
+
+  form.addEventListener('submit', function (e) {
+    /* The loading/validation handler in base runs on submit; intercept to show review first */
+    if (!reviewOpen) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var wrap = buildReview();
+      document.body.appendChild(wrap);
+      reviewOpen = true;
+      requestAnimationFrame(function () { wrap.classList.add('open'); });
+      var confirmBtn = wrap.querySelector('[data-confirm-seal]');
+      var cancelBtn = wrap.querySelector('[data-cancel-seal]');
+      var closeBtn = wrap.querySelector('.modal-close');
+      if (confirmBtn) confirmBtn.focus();
+      function cancel() { closeModal(wrap); var seal = document.getElementById('sealBtn'); if (seal) seal.focus(); }
+      if (cancelBtn) cancelBtn.addEventListener('click', cancel);
+      if (closeBtn) closeBtn.addEventListener('click', cancel);
+      wrap.addEventListener('click', function (ev) { if (ev.target === wrap) cancel(); });
+      wrap.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') cancel(); });
+      if (confirmBtn) confirmBtn.addEventListener('click', function () {
+        confirmBtn.classList.add('is-loading');
+        confirmBtn.disabled = true;
+        reviewOpen = true; /* keep guard active while submitting */
+        HTMLFormElement.prototype.submit.call(form);
+      });
+    }
+  }, true);
+
+  updateBallotProgress();
+})();
 </script>
 {% endblock %}

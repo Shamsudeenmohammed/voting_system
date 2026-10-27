@@ -1,25 +1,172 @@
 {% extends "base.html" %}
 {% block title %}Staff login · VoteSys{% endblock %}
 {% block content %}
-<div class="login-page">
-  <div class="login-card">
-    <h1>Staff sign in</h1>
-    <p class="hint">Election officials, administrators and auditors sign in here.
-      Voters never need an account: use the voter access page of your election.</p>
-    {% if form.errors %}<p class="messages error">Invalid username or password.</p>{% endif %}
-    <form method="post">
+<style>
+  /* ---- Staff login ---- */
+  .auth-wrap {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 2.5rem;
+    align-items: center;
+    max-width: 1020px;
+    margin: 2.5rem auto;
+    width: 100%;
+  }
+  .auth-brand {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(150deg, var(--navy-900) 0%, var(--navy-800) 60%, #262a75 100%);
+    color: var(--text-inverse);
+    border-radius: var(--radius-xl);
+    padding: 2.75rem 2.5rem;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .auth-brand::after {
+    content: "";
+    position: absolute;
+    right: -70px;
+    bottom: -70px;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgb(99 102 241 / 38%) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .auth-brand > * { position: relative; z-index: 1; }
+  .auth-brand-mark {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.55rem;
+    background: linear-gradient(135deg, var(--primary-hover) 0%, var(--primary-dark) 100%);
+    box-shadow: 0 12px 28px -8px rgb(99 102 241 / 70%);
+  }
+  .auth-brand h2 { font-size: 1.55rem; font-weight: 750; letter-spacing: -0.03em; line-height: 1.2; margin: 0; }
+  .auth-brand p { color: rgb(226 232 240 / 85%); font-size: 0.9rem; margin: 0; }
+  .auth-points { list-style: none; padding: 0; margin: 0.25rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
+  .auth-points li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    color: rgb(226 232 240 / 92%);
+    line-height: 1.5;
+  }
+  .auth-points li i { color: #a5b4fc; margin-top: 0.15rem; }
+
+  .auth-card { max-width: 440px; width: 100%; margin: 0 auto; }
+  .auth-card h1 { display: flex; align-items: center; gap: 0.6rem; }
+  .auth-card h1 i { color: var(--primary); }
+
+  .password-field { position: relative; }
+  .password-field input { padding-right: 2.75rem; }
+  .password-toggle {
+    position: absolute;
+    right: 0.45rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-fast);
+  }
+  .password-toggle:hover { background: var(--bg-secondary); color: var(--text-secondary); }
+  .password-toggle:focus-visible { outline: none; box-shadow: var(--ring); }
+
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border-color); }
+
+  @media (max-width: 900px) {
+    .auth-wrap { grid-template-columns: 1fr; gap: 1.5rem; margin: 1.5rem auto; max-width: 480px; }
+    .auth-brand { padding: 1.75rem 1.5rem; border-radius: var(--radius-lg); }
+  }
+</style>
+
+<div class="auth-wrap">
+  <section class="auth-brand" aria-hidden="true">
+    <span class="auth-brand-mark"><i class="bi bi-shield-lock"></i></span>
+    <h2>Election staff workspace</h2>
+    <p>One secure console for configuring elections, accrediting observers, monitoring turnout and publishing certified results.</p>
+    <ul class="auth-points">
+      <li><i class="bi bi-check-circle"></i> Full hash-chained audit trail on every action</li>
+      <li><i class="bi bi-check-circle"></i> Role-based permissions for officials and auditors</li>
+      <li><i class="bi bi-check-circle"></i> Live monitoring without ever exposing a ballot</li>
+    </ul>
+  </section>
+
+  <div class="login-card auth-card">
+    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+      <h1><i class="bi bi-person-badge"></i> Staff Sign In</h1>
+      <p class="hint">Election officials, administrators, and auditors sign in here. Voters never need an account — use the voter access page for your election.</p>
+    </div>
+    {% if form.errors %}
+      <div class="message error" style="margin: 0;">
+        <i class="bi bi-x-circle"></i>
+        <span>Invalid username or password.</span>
+      </div>
+    {% endif %}
+    <form method="post" style="display: flex; flex-direction: column; gap: 1rem;">
       {% csrf_token %}
       <div class="form-group">
-        <label for="id_username">Username</label>
-        <input class="input" type="text" name="username" id="id_username" required autofocus>
+        <label for="id_username"><i class="bi bi-person"></i> Username</label>
+        <input class="input" type="text" name="username" id="id_username" required autofocus autocomplete="username" placeholder="Enter your username">
       </div>
       <div class="form-group">
-        <label for="id_password">Password</label>
-        <input class="input" type="password" name="password" id="id_password" required>
+        <label for="id_password"><i class="bi bi-lock"></i> Password</label>
+        <div class="password-field">
+          <input class="input" type="password" name="password" id="id_password" required autocomplete="current-password" placeholder="Enter your password">
+          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-controls="id_password">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
       </div>
       <input type="hidden" name="next" value="{{ next }}">
-      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      <button class="btn btn-primary btn-block" type="submit"><i class="bi bi-box-arrow-in-right"></i> Sign in</button>
     </form>
+    <div class="auth-divider">Voters</div>
+    <p class="hint" style="text-align: center; margin: 0;">
+      Voting with a voter ID? <a href="{% url 'home' %}" style="color: var(--primary); font-weight: 600; text-decoration: none;">Go to the elections list</a> and open your election.
+    </p>
   </div>
 </div>
+
+<script>
+(function () {
+  'use strict';
+  var toggle = document.getElementById('passwordToggle');
+  var input = document.getElementById('id_password');
+  if (toggle && input) {
+    toggle.addEventListener('click', function () {
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      toggle.innerHTML = show ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+      input.focus();
+    });
+  }
+})();
+</script>
 {% endblock %}

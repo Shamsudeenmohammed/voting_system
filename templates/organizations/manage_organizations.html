@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Organizations · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Organization console ---- */
+  .org-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1.5rem; align-items: start; }
+  .org-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.35rem;
+    position: sticky;
+    top: calc(var(--header-h) + 1rem);
+  }
+  .org-panel h2 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
+  .org-panel h2 i { color: var(--primary); }
+  .org-name { display: flex; flex-direction: column; gap: 0.15rem; }
+  .org-name strong { font-weight: 650; }
+  .org-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .status-pill { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 650; }
+  .status-pill.on { color: var(--success); }
+  .status-pill.off { color: var(--text-muted); }
+  @media (max-width: 1000px) {
+    .org-layout { grid-template-columns: 1fr; }
+    .org-panel { position: static; order: -1; }
+  }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>Organizations</h1>
+    <p class="sub">
+      Every election belongs to exactly one organization. Create tenants and
+      sub-units (campus, faculty, department) here; assign people and roles on
+      the <a href="{% url 'manage_people' %}">People &amp; access</a> page.
+    </p>
+  </div>
+
+  <div class="org-layout">
+    <div>
+      {% if organizations %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Organization</th>
+                <th>Kind</th>
+                <th data-sortable data-type="num">Members</th>
+                <th data-sortable data-type="num">Elections</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in organizations %}
+                <tr>
+                  <td>
+                    <div class="org-name">
+                      <strong>{{ o.name }}</strong>
+                      {% if o.parent %}<span class="hint">under {{ o.parent.name }}</span>{% endif %}
+                    </div>
+                  </td>
+                  <td>{{ o.get_kind_display }}</td>
+                  <td>{{ o.member_count }}</td>
+                  <td>{{ o.election_count }}</td>
+                  <td>
+                    {% if o.is_active %}
+                      <span class="status-pill on"><i class="bi bi-check-circle-fill"></i> Active</span>
+                    {% else %}
+                      <span class="status-pill off"><i class="bi bi-slash-circle"></i> Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="org-actions">
+                      <a class="btn btn-xs btn-outline" href="{% url 'manage_organizations' %}?edit={{ o.pk }}"><i class="bi bi-pencil"></i> Edit</a>
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle">
+                        <input type="hidden" name="organization" value="{{ o.pk }}">
+                        <button class="btn btn-xs btn-outline" type="submit">
+                          {% if o.is_active %}<i class="bi bi-slash-circle"></i> Deactivate{% else %}<i class="bi bi-check-circle"></i> Activate{% endif %}
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card empty-state">
+          <span class="empty-icon"><i class="bi bi-buildings"></i></span>
+          <h2>No organizations yet</h2>
+          <p class="hint">
+            {% if can_create %}
+              Create the first tenant to start onboarding elections.
+            {% else %}
+              You do not administer any organization yet.
+            {% endif %}
+          </p>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if can_create %}
+      <aside class="org-panel">
+        <h2><i class="bi {% if edit_org %}bi-pencil-square{% else %}bi-plus-square{% endif %}"></i>
+          {% if edit_org %}Edit organization{% else %}New organization{% endif %}
+        </h2>
+        <form method="post" style="display: flex; flex-direction: column; gap: 0.9rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="{% if edit_org %}update{% else %}create{% endif %}">
+          {% if edit_org %}<input type="hidden" name="organization" value="{{ edit_org.pk }}">{% endif %}
+          {{ form.as_div }}
+          <div class="inline">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> {% if edit_org %}Save changes{% else %}Create{% endif %}</button>
+            {% if edit_org %}<a class="btn btn-outline" href="{% url 'manage_organizations' %}"><i class="bi bi-x-lg"></i> Cancel</a>{% endif %}
+          </div>
+        </form>
+      </aside>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

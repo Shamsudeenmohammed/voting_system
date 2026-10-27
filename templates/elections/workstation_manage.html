@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Workstation management{% endblock %}
+{% block content %}
+<div class="admin-content">
+  <h1>Workstation management (Super Admin)</h1>
+  <p class="hint">Register, edit, activate, disable, or revoke managed devices. Purpose determines permitted duties.</p>
+
+  <section class="card">
+    <h2>Register workstation</h2>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create">
+      <div class="form-row"><label>Name</label><input name="name" required></div>
+      <div class="form-row"><label>Code</label><input name="code" required></div>
+      <div class="form-row"><label>Purpose</label>
+        <select name="purpose">
+          {% for v,l in purposes %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row"><label>Election</label>
+        <select name="election"><option value="">-- none --</option>
+          {% for e in elections %}<option value="{{ e.pk }}">{{ e }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row"><label>Polling station</label>
+        <select name="polling_station"><option value="">-- none --</option>
+          {% for s in stations %}<option value="{{ s.pk }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row"><label>Device credential</label><input name="credential" type="password" required></div>
+      <button class="btn btn-primary" type="submit">Register</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Registered workstations</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Code</th><th>Purpose</th><th>Status</th><th>Election</th><th>Station</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for w in workstations %}
+        <tr>
+          <td>{{ w.name }}</td>
+          <td><code>{{ w.code }}</code></td>
+          <td>{{ w.get_purpose_display }}</td>
+          <td>{{ w.get_status_display }}</td>
+          <td>{{ w.election }}</td>
+          <td>{{ w.polling_station }}</td>
+          <td>
+            <form method="post" style="display:inline;">
+              {% csrf_token %}<input type="hidden" name="action" value="activate"><input type="hidden" name="id" value="{{ w.pk }}">
+              <button type="submit">Activate</button>
+            </form>
+            <form method="post" style="display:inline;">
+              {% csrf_token %}<input type="hidden" name="action" value="disable"><input type="hidden" name="id" value="{{ w.pk }}">
+              <button type="submit">Disable</button>
+            </form>
+            <form method="post" style="display:inline;">
+              {% csrf_token %}<input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="{{ w.pk }}">
+              <button type="submit">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

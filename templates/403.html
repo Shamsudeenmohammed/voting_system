@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Access denied · VoteSys{% endblock %}
+{% block content %}
+<div class="confirm">
+  <span class="icon" style="background: linear-gradient(160deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 14px 30px -10px rgb(220 38 38 / 60%);">
+    <i class="bi bi-shield-lock"></i>
+  </span>
+  <h1 style="font-size: 1.5rem; font-weight: 750; letter-spacing: -0.02em; margin: 0;">Access denied</h1>
+  <p style="color: var(--text-secondary); max-width: 52ch; margin: 0;">{{ message }}</p>
+
+  <div class="action-links" style="justify-content: center; margin-top: 0.5rem;">
+    {% if user.is_authenticated %}
+      <a class="btn btn-primary btn-sm" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Back to dashboard</a>
+    {% else %}
+      <a class="btn btn-primary btn-sm" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right"></i> Sign in</a>
+    {% endif %}
+    <a class="btn btn-outline btn-sm" href="{% url 'home' %}"><i class="bi bi-collection"></i> Public elections</a>
+  </div>
+
+  <p class="hint" style="margin: 0.75rem 0 0;">
+    If you believe you should have access, ask an institution election
+    administrator or the election commission chair to grant you the right role
+    for the organization that owns this election. Some actions also require a
+    second approver (four-eyes); the message above names the required approval
+    and the workflow to use.
+  </p>
+</div>
+{% endblock %}

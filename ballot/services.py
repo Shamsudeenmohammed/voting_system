@@ -62,6 +62,11 @@ class DuplicateVote(BallotError):
     http_status = 409
 
 
+class TokenIssuanceError(BallotError):
+    code = "token_issuance_blocked"
+    http_status = 409
+
+
 class InvalidSelection(BallotError):
     code = "invalid_selection"
     http_status = 400
@@ -80,35 +85,247 @@ class CastResult:
 # ---------------------------------------------------------------------------
 
 
-def issue_authorization(voter, *, actor=None, token: str | None = None):
-    """(Re)issue the single-use ballot authorization for one voter.
+from dataclasses import dataclass
 
-    Returns ``(authorization, plaintext_token)``.  The plaintext token is
-    shown/downloaded exactly once - only its hash is stored.
+
+@dataclass
+class TokenIssuanceResult:
+    status: str
+    voter: object
+    authorization: object
+    token: str | None
+    message: str
+
+
+@dataclass
+class TokenRevocationResult:
+    status: str
+    voter: object
+    authorization: object
+    revoked: int
+    message: str
+
+
+ALREADY_VOTED_MESSAGE = "This voter has already cast their vote. No new token can be issued."
+
+
+def _actor_is_authenticated(actor) -> bool:
+    return bool(getattr(actor, "is_authenticated", False))
+
+
+def issue_voter_token(
+    voter,
+    *,
+    election=None,
+    actor=None,
+    request=None,
+    allow_reissue: bool = False,
+    reason: str = "",
+    require_open: bool = True,
+):
+    """Shared, server-side token-issuance service.
+
+    Enforces, in order: voter exists; eligibility; open election; correct
+    assignment/scope; not already voted; no active valid token.  Returns a
+    :class:`TokenIssuanceResult`.  A plaintext token is returned only when a
+    new authorization is actually issued.
     """
+    from audit import services as audit
     from ballot import crypto
     from ballot.models import BallotAuthorization
+    from elections.models import Election, Voter
 
-    token = token or crypto.new_access_token()
-    token_hash = crypto.hash_token(token)
-    with transaction.atomic():
-        BallotAuthorization.objects.filter(
-            voter=voter, consumed_at__isnull=True, revoked_at__isnull=True
-        ).exclude(token_hash=token_hash).update(revoked_at=timezone.now())
-        auth, _created = BallotAuthorization.objects.update_or_create(
+    now = timezone.now()
+
+    if voter is None:
+        return TokenIssuanceResult(
+            status="unregistered",
+            voter=None,
+            authorization=None,
+            token=None,
+            message="This voter is not registered for this election.",
+        )
+
+    election = election or getattr(voter, "election", None)
+    if election is None:
+        return TokenIssuanceResult(
+            status="unregistered",
             voter=voter,
+            authorization=None,
+            token=None,
+            message="This voter is not registered for this election.",
+        )
+
+    with transaction.atomic():
+        try:
+            voter_row = Voter.objects.select_for_update().get(pk=voter.pk)
+        except Voter.DoesNotExist:
+            return TokenIssuanceResult(
+                status="unregistered",
+                voter=None,
+                authorization=None,
+                token=None,
+                message="This voter is not registered for this election.",
+            )
+        election_row = Election.objects.select_for_update().get(pk=election.pk)
+
+        # 1. voter exists (handled above)
+        # 2. eligible
+        if voter_row.status != Voter.STATUS_ACTIVE or not voter_row.eligible_for(election_row):
+            return TokenIssuanceResult(
+                status="ineligible",
+                voter=voter_row,
+                authorization=None,
+                token=None,
+                message="This voter is not eligible for this election.",
+            )
+
+        # 3. election open and permits voting (when required)
+        if require_open and (not election_row.accepts_ballots or now > election_row.end_at):
+            return TokenIssuanceResult(
+                status="election_closed",
+                voter=voter_row,
+                authorization=None,
+                token=None,
+                message="This election is not open for voting.",
+            )
+
+        # 4. correct institution/election/scope
+        if voter_row.election_id != election_row.pk:
+            return TokenIssuanceResult(
+                status="ineligible",
+                voter=voter_row,
+                authorization=None,
+                token=None,
+                message="This voter is not assigned to this election.",
+            )
+
+        # 5. has not already cast an accepted ballot
+        already_voted = voter_row.has_voted or BallotAuthorization.objects.filter(
+            voter=voter_row, consumed_at__isnull=False
+        ).exists()
+        if already_voted:
+            auth = BallotAuthorization.objects.filter(
+                voter=voter_row, consumed_at__isnull=False
+            ).order_by("-consumed_at").first()
+            return TokenIssuanceResult(
+                status="already_voted",
+                voter=voter_row,
+                authorization=auth,
+                token=None,
+                message=ALREADY_VOTED_MESSAGE,
+            )
+
+        # Existing authorizations
+        active_qs = BallotAuthorization.objects.filter(
+            voter=voter_row,
+            election=election_row,
             consumed_at__isnull=True,
             revoked_at__isnull=True,
-            defaults={
-                "election_id": voter.election_id,
-                "token_hash": token_hash,
-                "issued_by": actor if getattr(actor, "is_authenticated", False) else None,
-                "expires_at": None,
-            },
         )
-        voter.credentials_issued_at = timezone.now()
-        voter.save(update_fields=["credentials_issued_at"])
-    return auth, token
+        active_usable = [a for a in active_qs if a.usable]
+
+        # 6. no valid/active token already exists (unless explicit reissue)
+        if active_usable and not (allow_reissue and reason and reason.strip()):
+            auth = active_usable[0]
+            return TokenIssuanceResult(
+                status="active_token",
+                voter=voter_row,
+                authorization=auth,
+                token=None,
+                message="A valid voting token is already active for this voter. No duplicate token generated.",
+            )
+
+        # Explicit, audited revocation-and-reissue path.
+        if allow_reissue and reason and reason.strip():
+            revoked = active_qs.update(revoked_at=now)
+            audit.record(
+                action="credential_revoked",
+                actor=actor if _actor_is_authenticated(actor) else None,
+                election=election_row,
+                organization=getattr(election_row, "organization", None),
+                request=request,
+                object_type="voter",
+                object_id=str(voter_row.pk),
+                reason=reason,
+                details={"revoked": revoked, "reissue": True},
+            )
+
+        # Revoke any expired/lingering unused authorizations before issuing.
+        BallotAuthorization.objects.filter(
+            voter=voter_row,
+            election=election_row,
+            consumed_at__isnull=True,
+            revoked_at__isnull=True,
+            expires_at__lt=now,
+        ).update(revoked_at=now)
+        BallotAuthorization.objects.filter(
+            voter=voter_row,
+            consumed_at__isnull=True,
+            revoked_at__isnull=True,
+        ).update(revoked_at=now)
+
+        token = crypto.new_voter_token(election_row.token_format)
+        token_hash = crypto.hash_token(token)
+        auth = BallotAuthorization.objects.create(
+            election=election_row,
+            voter=voter_row,
+            token_hash=token_hash,
+            issued_by=actor if _actor_is_authenticated(actor) else None,
+            expires_at=_compute_token_expiry(election_row),
+        )
+        voter_row.credentials_issued_at = now
+        voter_row.save(update_fields=["credentials_issued_at"])
+
+        audit.record(
+            action="credential_issued",
+            actor=actor if _actor_is_authenticated(actor) else None,
+            election=election_row,
+            organization=getattr(election_row, "organization", None),
+            request=request,
+            object_type="voter",
+            object_id=str(voter_row.pk),
+            details={"voter_id_hash": audit.hash_ip(voter_row.voter_id)},
+        )
+        reissued = bool(allow_reissue and reason and reason.strip())
+        return TokenIssuanceResult(
+            status="reissued" if reissued else "issued",
+            voter=voter_row,
+            authorization=auth,
+            token=token,
+            message=(
+                "Token replaced — the previous token is no longer valid."
+                if reissued
+                else "Eligible — token issued."
+            ),
+        )
+
+
+def issue_authorization(voter, *, actor=None, token: str | None = None, election=None, request=None, **kwargs):
+    """Backwards-compatible wrapper around :func:`issue_voter_token`.
+
+    Raises :class:`TokenIssuanceError` when issuance is blocked, so existing
+    callers that expect a usable token keep their contract.
+    """
+    result = issue_voter_token(
+        voter,
+        election=election,
+        actor=actor,
+        request=request,
+        allow_reissue=kwargs.pop("allow_reissue", False),
+        reason=kwargs.pop("reason", ""),
+        require_open=kwargs.pop("require_open", True),
+    )
+    if result.token is None:
+        raise TokenIssuanceError(result.message)
+    return result.authorization, result.token
+
+
+def _compute_token_expiry(election):
+    """Compute token expiry based on election configuration."""
+    if election.token_expiry_hours and election.token_expiry_hours > 0:
+        return timezone.now() + timedelta(hours=election.token_expiry_hours)
+    return None
 
 
 def issue_missing_credentials(election, *, actor=None, request=None) -> dict:
@@ -123,15 +340,16 @@ def issue_missing_credentials(election, *, actor=None, request=None) -> dict:
 
     issued_tokens: list[tuple[str, str, str]] = []
     missing = Voter.objects.filter(
-        election=election, status=Voter.STATUS_ACTIVE
+        election=election, status=Voter.STATUS_ACTIVE, has_voted=False
     ).exclude(
         id__in=BallotAuthorization.objects.filter(
             election=election, consumed_at__isnull=True, revoked_at__isnull=True
         ).values("voter_id")
     )
     for voter in missing.iterator():
-        _auth, token = issue_authorization(voter, actor=actor)
-        issued_tokens.append((voter.voter_id, token, voter.full_name))
+        result = issue_voter_token(voter, election=election, actor=actor, require_open=False)
+        if result.token is not None:
+            issued_tokens.append((voter.voter_id, result.token, voter.full_name))
     path = None
     if issued_tokens:
         path = append_credentials(election, issued_tokens)
@@ -335,7 +553,7 @@ def cast_ballot(
                     idempotent=True,
                 )
             raise DuplicateVote(
-                "A ballot was already accepted for this voting credential."
+                "You have already cast your vote for this election. You cannot vote again."
             )
 
         voter_row = Voter.objects.select_for_update().get(pk=voter.pk)
@@ -416,3 +634,123 @@ def revoke_credential(voter, *, actor=None, reason: str = "", request=None):
         details={"revoked": revoked},
     )
     return revoked
+
+
+def revoke_voter_token(
+    voter, *, actor=None, reason: str = "", request=None
+) -> TokenRevocationResult:
+    """Revoke a voter's unused token from the verification workstation.
+
+    The action is refused after the voter has cast a ballot, even if a stale
+    unused authorization exists.  The voter row is locked so a reissue and a
+    revocation cannot interleave, and the conditional update protects against
+    a ballot being accepted concurrently.
+    """
+    from audit import services as audit
+    from ballot.models import BallotAuthorization
+    from elections.models import Voter
+
+    if voter is None:
+        return TokenRevocationResult(
+            status="unregistered",
+            voter=None,
+            authorization=None,
+            revoked=0,
+            message="This voter is not registered for this election.",
+        )
+
+    with transaction.atomic():
+        try:
+            voter_row = Voter.objects.select_for_update().get(pk=voter.pk)
+        except Voter.DoesNotExist:
+            return TokenRevocationResult(
+                status="unregistered",
+                voter=None,
+                authorization=None,
+                revoked=0,
+                message="This voter is not registered for this election.",
+            )
+
+        consumed = (
+            BallotAuthorization.objects.filter(
+                voter=voter_row,
+                election=voter_row.election,
+                consumed_at__isnull=False,
+            )
+            .order_by("-consumed_at")
+            .first()
+        )
+        if voter_row.has_voted or consumed is not None:
+            return TokenRevocationResult(
+                status="already_voted",
+                voter=voter_row,
+                authorization=consumed,
+                revoked=0,
+                message=(
+                    "This voter has already cast their vote. "
+                    "The token cannot be revoked or replaced."
+                ),
+            )
+
+        unused = BallotAuthorization.objects.filter(
+            voter=voter_row,
+            election=voter_row.election,
+            consumed_at__isnull=True,
+            revoked_at__isnull=True,
+        )
+        authorization = unused.order_by("-issued_at").first()
+        if authorization is None:
+            return TokenRevocationResult(
+                status="no_token",
+                voter=voter_row,
+                authorization=None,
+                revoked=0,
+                message="There is no unused voting token to revoke for this voter.",
+            )
+
+        revoked = unused.update(revoked_at=timezone.now())
+        if not revoked:
+            # A ballot was accepted between the guard and the update, or the
+            # row disappeared.  Re-check and report accurately.
+            consumed = BallotAuthorization.objects.filter(
+                voter=voter_row,
+                election=voter_row.election,
+                consumed_at__isnull=False,
+            ).first()
+            if consumed is not None:
+                return TokenRevocationResult(
+                    status="already_voted",
+                    voter=voter_row,
+                    authorization=consumed,
+                    revoked=0,
+                    message=(
+                        "This voter has already cast their vote. "
+                        "The token cannot be revoked or replaced."
+                    ),
+                )
+            return TokenRevocationResult(
+                status="no_token",
+                voter=voter_row,
+                authorization=None,
+                revoked=0,
+                message="There is no unused voting token to revoke for this voter.",
+            )
+
+        audit.record(
+            action="credential_revoked",
+            actor=actor if _actor_is_authenticated(actor) else None,
+            election=voter_row.election,
+            organization=getattr(voter_row.election, "organization", None),
+            request=request,
+            object_type="voter",
+            object_id=str(voter_row.pk),
+            reason=reason,
+            details={"revoked": revoked},
+        )
+        return TokenRevocationResult(
+            status="revoked",
+            voter=voter_row,
+            authorization=authorization,
+            revoked=revoked,
+            message="Unused voting token revoked. No ballot was cast.",
+        )

@@ -6,6 +6,10 @@
 #   background tasks; ballot acceptance and tallying run in-request.
 # * `secrets` and `credentials` volumes hold the ballot encryption key and
 #   the issued-credential CSVs; back them up with the database (docs/OPERATIONS.md).
+# * The `media` volume persists uploaded candidate passport photographs
+#   (MEDIA_ROOT); back it up together with the database. In production put
+#   nginx (or similar) in front and serve /media/ from it, then set
+#   SERVE_MEDIA=False (docs/DEPLOY_ONLINE.md).
 
 name: voting-system
 
@@ -51,6 +55,7 @@ services:
     volumes:
       - secrets:/app/secrets
       - credentials:/app/private
+      - media:/app/media
     depends_on:
       db:
         condition: service_healthy
@@ -86,3 +91,4 @@ volumes:
   pgdata:
   secrets:
   credentials:
+  media:

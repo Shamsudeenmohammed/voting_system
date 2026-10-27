@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Voter Login · {{ election.title }}{% endblock %}
+{% block content %}
+<style>
+  html, body { overflow: hidden; height: 100%; }
+  .app-main { overflow: hidden; }
+  .app-header .header-actions, .app-header .logo, .menu-toggle { display: none; }
+  /* Replace static/img/login-background.jpg with any image you choose. */
+  .app-main {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.62)), url("{% static 'img/CK-LOGO-symbol (1).png' %}");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .login-card { background: rgb(255 255 255 / 70%); backdrop-filter: blur(4px); }
+  /* ---- Voter Login ---- */
+  .vote-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .vote-steps .step { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .vote-steps .step i { font-size: 1.05rem; }
+  .vote-steps .step.active { color: var(--primary); }
+  .vote-steps .step.done { color: var(--success); }
+  .vote-steps .sep { color: var(--border-color-strong); }
+
+  .login-card {
+    max-width: 420px;
+    margin: 1rem auto;
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-color);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    position: relative;
+  }
+  .login-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    background: linear-gradient(90deg, var(--primary) 0%, #818cf8 50%, #38bdf8 100%);
+  }
+  .login-card h1 { font-size: 1.6rem; font-weight: 750; color: var(--text-primary); letter-spacing: -0.03em; line-height: 1.2; text-align: center; }
+  .login-card h2 { font-size: 1.2rem; font-weight: 650; color: var(--text-primary); line-height: 1.35; text-align: center; }
+  .login-box { max-width: 100%; }
+
+  .form-group { margin-bottom: 1.15rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .form-group label { font-weight: 600; font-size: 0.82rem; color: var(--text-secondary); letter-spacing: 0.01em; display: inline-flex; align-items: center; gap: 0.35rem; }
+  .input {
+    width: 100%; padding: 0.62rem 0.9rem; border: 1px solid var(--border-color-strong); border-radius: var(--radius-sm);
+    font-size: 0.9rem; background: var(--bg-card); color: var(--text-primary); transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+    line-height: 1.5; box-shadow: inset 0 1px 2px rgb(15 23 42 / 3%);
+  }
+  .input:hover { border-color: #a5b4fc; }
+  .input:focus { outline: none; border-color: var(--primary); box-shadow: var(--ring); background: #fff; }
+  .input:invalid { border-color: #f87171; background: var(--danger-bg); }
+  .input::placeholder { color: var(--text-muted); }
+
+  .token-input { font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Courier New", monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+
+  .format-hint { font-size: 0.75rem; color: var(--text-tertiary); text-align: center; padding: 0.5rem; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px dashed var(--border-color-strong); }
+  .format-hint code { background: var(--bg-card); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem; }
+
+  .error-message {
+    display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.9rem 1rem; border-radius: var(--radius-md);
+    font-size: 0.875rem; font-weight: 500; line-height: 1.55; background: var(--danger-bg); color: #991b1b; border: 1px solid #fecaca;
+  }
+  .error-message i { font-size: 1.15rem; flex-shrink: 0; margin-top: 0.1rem; }
+
+  .btn-block { width: 100%; }
+
+  @media (max-width: 560px) {
+    .login-card { padding: 1.5rem 1.15rem; margin: 1.25rem auto; }
+    .vote-steps { font-size: 0.66rem; }
+  }
+</style>
+
+<div class="login-card">
+  <div class="vote-steps" aria-hidden="true">
+    <span class="step active"><i class="bi bi-person-vcard"></i> Voter ID</span>
+    <span class="sep"><i class="bi bi-chevron-right"></i></span>
+    <span class="step"><i class="bi bi-key"></i> Credential</span>
+    <span class="sep"><i class="bi bi-chevron-right"></i></span>
+    <span class="step"><i class="bi bi-check2-square"></i> Ballot</span>
+  </div>
+
+  <h1><i class="bi bi-shield-lock"></i> Voter Login</h1>
+  <p class="hint" style="text-align: center;">Enter your Voter ID and the 6-character voting credential issued for this election.</p>
+
+  {% if error %}
+    <div class="error-message" role="alert">
+      <i class="bi bi-exclamation-triangle"></i>
+      <span>{{ error }}</span>
+    </div>
+  {% endif %}
+
+  <form method="post" class="login-box" style="display: flex; flex-direction: column; gap: 1rem;">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="id_voter_id"><i class="bi bi-person-vcard"></i> Voter ID</label>
+      <input class="input" type="text" name="voter_id" id="id_voter_id"
+             autocomplete="off" autofocus required placeholder="Enter your Voter ID"
+             value="{{ voter_id|default:'' }}">
+    </div>
+    <div class="form-group">
+      <label for="id_token"><i class="bi bi-key"></i> Voting Credential</label>
+      <input class="input token-input" type="text" name="token" id="id_token"
+             autocomplete="off" required placeholder="Enter your 6-character credential"
+             maxlength="6" style="text-transform: uppercase;"
+             value="{{ token|default:'' }}">
+      {% if token_format == "numeric" %}
+      <div class="format-hint">
+        <i class="bi bi-123"></i> Numeric format: <code>6 digits</code> (leading zeros preserved, e.g. <code>001234</code>)
+      </div>
+      {% endif %}
+    </div>
+    <button class="btn btn-primary btn-block" type="submit"><i class="bi bi-box-arrow-in-right"></i> Access my ballot</button>
+  </form>
+
+
+</div>
+
+<script>
+  // Auto-format token input
+  const tokenInput = document.getElementById('id_token');
+  if (tokenInput) {
+    tokenInput.addEventListener('input', function(e) {
+      // Convert to uppercase for alphanumeric
+      this.value = this.value.toUpperCase();
+      // Enforce max length (backup for maxlength attribute)
+      if (this.value.length > 6) {
+        this.value = this.value.slice(0, 6);
+      }
+    });
+
+    // Paste handling - strip spaces, uppercase, truncate
+    tokenInput.addEventListener('paste', function(e) {
+      e.preventDefault();
+      const paste = (e.clipboardData || window.clipboardData).getData('text');
+      const cleaned = paste.replace(/\s+/g, '').toUpperCase().slice(0, 6);
+      this.value = cleaned;
+      this.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  // Clear token on page load for security (don't preserve in form history)
+  window.addEventListener('pageshow', function(event) {
+    if (event.persisted && tokenInput) {
+      tokenInput.value = '';
+    }
+  });
+
+  // Focus token field if voter_id is pre-filled
+  const voterIdInput = document.getElementById('id_voter_id');
+  if (voterIdInput && voterIdInput.value && tokenInput) {
+    tokenInput.focus();
+  }
+</script>
+{% endblock %}

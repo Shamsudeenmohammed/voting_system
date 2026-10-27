@@ -1,51 +1,96 @@
 {% extends "base.html" %}
 {% block title %}Representatives · {{ election.title }}{% endblock %}
 {% block content %}
-<div class="admin-content">
-  <h1>Representatives — {{ election.title }}</h1>
-  <p><span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
-     &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a>
-     &middot; <a href="{% url 'incident_list' election.pk %}">Incidents</a></p>
-  <table>
-    <thead><tr><th>Name</th><th>Candidate</th><th>Status</th><th>Visits</th><th></th></tr></thead>
-    <tbody>
-      {% for r in reps %}
-        <tr>
-          <td>{{ r.full_name }} <span class="hint">{{ r.email }}</span></td>
-          <td>{{ r.candidate.full_name }}</td>
-          <td>{{ r.get_status_display }}</td>
-          <td>{{ r.attendance_count }}</td>
-          <td class="action-links">
-            {% if r.status == r.STATUS_PENDING %}
-              <form method="post" action="{% url 'decide' r.pk %}" class="inline">
-                {% csrf_token %}<input type="hidden" name="decision" value="approve">
-                <button class="btn btn-sm btn-success" type="submit">Approve</button>
-              </form>
-            {% endif %}
-            {% if r.status == r.STATUS_APPROVED %}
-              <form method="post" action="{% url 'accredit' r.pk %}" class="inline">
-                {% csrf_token %}
-                <button class="btn btn-sm btn-primary" type="submit">Accredit visit</button>
-              </form>
-            {% endif %}
-            {% if r.status != r.STATUS_REVOKED %}
-              <form method="post" action="{% url 'decide' r.pk %}" class="inline">
-                {% csrf_token %}<input type="hidden" name="decision" value="revoke">
-                <button class="btn btn-sm btn-outline" type="submit">Revoke</button>
-              </form>
-            {% endif %}
-          </td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="5" class="hint">No representatives applied yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<style>
+  /* ---- Representatives approval list ---- */
+  .reps-head { display: flex; flex-direction: column; gap: 0.55rem; }
+  .rep-name { font-weight: 600; color: var(--text-primary); }
+  .rep-email { display: block; font-size: 0.78rem; color: var(--text-tertiary); }
+  .st-pending { background: var(--warning-bg); color: #b45309; border-color: #fde68a; }
+  .st-approved { background: var(--success-bg); color: #047857; border-color: #bbf7d0; }
+  .st-revoked { background: var(--danger-bg); color: #b91c1c; border-color: #fecaca; }
+  .sev-high { background: var(--danger-bg); color: #b91c1c; border-color: #fecaca; }
+  .sev-medium { background: var(--warning-bg); color: #b45309; border-color: #fde68a; }
+  .sev-low { background: var(--info-bg); color: #1d4ed8; border-color: #bfdbfe; }
+  .decision-forms { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .incident-feed { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+  .incident-feed li {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 0.9rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    transition: var(--transition-fast);
+  }
+  .incident-feed li:hover { border-color: rgb(129 140 248 / 45%); background: var(--primary-light); }
+</style>
 
-  <h2>Recent incidents</h2>
-  <ul>
-    {% for i in incidents %}<li>[{{ i.get_severity_display }}] {{ i.title }} — {{ i.get_status_display }}</li>{% empty %}
-      <li class="hint">No incidents reported.</li>{% endfor %}
-  </ul>
+<div class="admin-content">
+  <div class="reps-head page-head">
+    <h1>Representatives — {{ election.title }}</h1>
+    <div class="meta-row">
+      <span class="badge {% if election.state_badge %}{{ election.state_badge }}{% else %}badge-closed{% endif %}">{{ election.get_state_display }}</span>
+      <a href="{% url 'election_config' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Configuration</a>
+      <a href="{% url 'incident_list' election.pk %}" class="back-link"><i class="bi bi-list-task"></i> Incidents</a>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-sortable>Name</th><th data-sortable>Candidate</th><th data-sortable>Status</th><th data-sortable data-type="num">Visits</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for r in reps %}
+          <tr>
+            <td><span class="rep-name">{{ r.full_name }}</span><span class="rep-email">{{ r.email }}</span></td>
+            <td>{{ r.candidate.full_name }}</td>
+            <td><span class="badge {% if r.status == r.STATUS_PENDING %}st-pending{% elif r.status == r.STATUS_APPROVED %}st-approved{% elif r.status == r.STATUS_REVOKED %}st-revoked{% endif %}">{{ r.get_status_display }}</span></td>
+            <td>{{ r.attendance_count }}</td>
+            <td>
+              <div class="decision-forms">
+                {% if r.status == r.STATUS_PENDING %}
+                  <form method="post" action="{% url 'decide' r.pk %}" class="inline">
+                    {% csrf_token %}<input type="hidden" name="decision" value="approve">
+                    <button class="btn btn-sm btn-success" type="submit"><i class="bi bi-check-lg"></i> Approve</button>
+                  </form>
+                {% endif %}
+                {% if r.status == r.STATUS_APPROVED %}
+                  <form method="post" action="{% url 'accredit' r.pk %}" class="inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-person-check"></i> Accredit visit</button>
+                  </form>
+                {% endif %}
+                {% if r.status != r.STATUS_REVOKED %}
+                  <form method="post" action="{% url 'decide' r.pk %}" class="inline">
+                    {% csrf_token %}<input type="hidden" name="decision" value="revoke">
+                    <button class="btn btn-sm btn-outline" type="submit"><i class="bi bi-x-circle"></i> Revoke</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="hint" style="text-align: center; padding: 2rem;">No representatives applied yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <section class="card inline-section">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-exclamation-triangle" style="color: var(--primary);"></i> Recent incidents</h2>
+    <ul class="incident-feed">
+      {% for i in incidents %}
+        <li>
+          <span class="badge {% if i.severity == 'high' %}sev-high{% elif i.severity == 'medium' %}sev-medium{% else %}sev-low{% endif %}">{{ i.get_severity_display }}</span>
+          <span>{{ i.title }} — {{ i.get_status_display }}</span>
+        </li>
+      {% empty %}
+        <li class="hint">No incidents reported.</li>
+      {% endfor %}
+    </ul>
+  </section>
 </div>
 {% endblock %}

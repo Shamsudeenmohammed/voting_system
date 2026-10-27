@@ -1,50 +1,965 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · VoteSys{% endblock %}
 {% block content %}
-<div class="admin-content">
-  <div class="admin-layout">
-    <aside class="admin-sidebar">
-      <h2>Elections</h2>
-      <form method="get">
-        <div class="form-group">{{ form.q }}</div>
-        <div class="form-group">{{ form.state }}</div>
-        <button class="btn btn-sm btn-outline" type="submit">Filter</button>
-      </form>
-      <p><a class="btn btn-primary btn-sm" href="{% url 'election_create' %}">New election</a></p>
-      {% if orgs %}
-        <h3>Organizations</h3>
-        <ul>
-          {% for o in orgs %}<li>{{ o.name }}</li>{% endfor %}
-        </ul>
+<style>
+  /* ===================== Election dashboard ===================== */
+  .dash {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    width: 100%;
+    max-width: 1240px;
+    margin: 0 auto;
+    min-width: 0;
+  }
+
+  .sr-only {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* --------------------------- Header --------------------------- */
+  .dash-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: 0.15rem 0 0.25rem;
+  }
+  .dash-heading { min-width: 0; }
+  .dash-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.32rem 0.62rem;
+    border: 1px solid #dfe4ff;
+    border-radius: 999px;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+  .dash-eyebrow i { font-size: 0.8rem; }
+  .dash-heading h1 {
+    margin: 0.7rem 0 0.4rem;
+    font-size: clamp(1.7rem, 2.6vw, 2.1rem);
+    font-weight: 750;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+    color: var(--text-primary);
+  }
+  .dash-sub {
+    margin: 0;
+    max-width: 70ch;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+  .dash-sub strong { color: var(--text-primary); font-weight: 650; }
+  .dash-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+  .action-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 0.35rem;
+    border: 1px solid #fde68a;
+    border-radius: 999px;
+    background: var(--warning-bg);
+    color: #92400e;
+    font-size: 0.68rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --------------------------- Metrics -------------------------- */
+  .dash-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .metric {
+    --metric-accent: var(--primary);
+    --metric-soft: var(--primary-light);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+    padding: 1.1rem 1.15rem 1.05rem;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--bg-card);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+    color: inherit;
+    text-decoration: none;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+                border-color var(--transition-fast);
+  }
+  .metric::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--metric-accent) 0%, transparent 88%);
+    opacity: 0.9;
+  }
+  .metric:hover {
+    transform: translateY(-2px);
+    border-color: rgb(129 140 248 / 42%);
+    box-shadow: 0 10px 24px -12px rgb(15 23 42 / 22%);
+  }
+  .metric:focus-visible {
+    outline: none;
+    box-shadow: var(--ring), 0 10px 24px -12px rgb(15 23 42 / 22%);
+  }
+  .metric-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .metric-label {
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.07em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .metric-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: var(--metric-soft);
+    color: var(--metric-accent);
+    font-size: 0.95rem;
+  }
+  .metric-value {
+    font-size: 1.8rem;
+    font-weight: 750;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-hint {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .metric-open { --metric-accent: var(--success); --metric-soft: var(--success-bg); }
+  .metric-open .metric-icon { border-color: #bbf7d0; }
+  .metric-scheduled { --metric-accent: var(--warning); --metric-soft: var(--warning-bg); }
+  .metric-scheduled .metric-icon { border-color: #fde68a; }
+  .metric-attention { --metric-accent: var(--danger); --metric-soft: var(--danger-bg); }
+  .metric-attention .metric-icon { border-color: #fecaca; }
+  .metric-attention.is-clear { --metric-accent: var(--success); --metric-soft: var(--success-bg); }
+  .metric-attention.is-clear .metric-icon { border-color: #bbf7d0; }
+
+  /* ---------------------------- Panels -------------------------- */
+  .dash-panel {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--bg-card);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+  }
+  .panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1.2rem 1.35rem 1rem;
+  }
+  .panel-title { min-width: 0; }
+  .panel-title h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.35;
+  }
+  .panel-title p {
+    margin: 0.22rem 0 0;
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .panel-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+    font-size: 0.72rem;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  /* -------------------------- Attention ------------------------- */
+  .attention-panel .panel-head { background: linear-gradient(180deg, #fffdf8 0%, #fff 100%); }
+  .attention-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border: 1px solid #fde68a;
+    border-radius: 9px;
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.85rem;
+  }
+  .approvals-callout {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    margin: 0 1.35rem 0.9rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: var(--warning-bg);
+    color: #92400e;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .approvals-callout i { font-size: 1rem; flex-shrink: 0; }
+  .approvals-callout > span { flex: 1 1 220px; }
+  .callout-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: #92400e;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .callout-link:hover { color: #78350f; text-decoration: underline; }
+  .attention-list { display: flex; flex-direction: column; }
+  .attention-row {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.85rem 1.35rem;
+    border-top: 1px solid var(--border-color);
+    border-left: 3px solid transparent;
+    transition: background var(--transition-fast);
+  }
+  .attention-row:hover { background: var(--bg-soft); }
+  .attention-row.is-blocking { border-left-color: var(--danger); }
+  .attention-row.is-warning { border-left-color: var(--warning); }
+  .attention-row.is-ok { border-left-color: var(--success); }
+  .severity-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+  }
+  .severity-dot.blocking { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-bg); }
+  .severity-dot.pending,
+  .severity-dot.warning { background: var(--warning); box-shadow: 0 0 0 2px var(--warning-bg); }
+  .severity-dot.ok { background: var(--success); box-shadow: 0 0 0 2px var(--success-bg); }
+  .attention-main { flex: 1 1 260px; min-width: 0; }
+  .attention-main .attention-title {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    font-weight: 650;
+    line-height: 1.4;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color var(--transition-fast);
+  }
+  .attention-main .attention-title:hover { color: var(--primary); }
+  .attention-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.45rem;
+    margin-top: 0.18rem;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    line-height: 1.5;
+  }
+  .attention-meta > span { display: inline-flex; align-items: center; gap: 0.28rem; }
+  .attention-meta > span + span::before {
+    content: "·";
+    margin-right: 0.12rem;
+    color: var(--text-muted);
+  }
+  .attention-meta i { font-size: 0.72rem; }
+  .attention-state { flex-shrink: 0; }
+  .attention-action { flex-shrink: 0; }
+  .action-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text-secondary);
+    font-size: 0.73rem;
+    font-weight: 650;
+    line-height: 1.45;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background var(--transition-fast), border-color var(--transition-fast),
+                color var(--transition-fast), transform var(--transition-fast);
+  }
+  .action-chip:hover {
+    transform: translateY(-1px);
+    border-color: #c7d2fe;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+  }
+  .action-chip:focus-visible { outline: none; box-shadow: var(--ring); }
+  .action-chip.primary { border-color: #dfe4ff; background: var(--primary-light); color: var(--primary-dark); }
+  .action-chip.success { border-color: #bbf7d0; background: var(--success-bg); color: #047857; }
+  .action-chip.warning { border-color: #fde68a; background: var(--warning-bg); color: #92400e; }
+
+  /* ------------------------ Elections panel --------------------- */
+  .panel-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    padding: 0.8rem 1.35rem;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-soft);
+  }
+  .filter-search {
+    position: relative;
+    flex: 1 1 240px;
+    max-width: 360px;
+    min-width: 0;
+  }
+  .filter-search > i {
+    position: absolute;
+    top: 50%;
+    left: 0.8rem;
+    z-index: 1;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    pointer-events: none;
+  }
+  .filter-search .input { padding-left: 2.2rem; }
+  .filter-state { flex: 0 1 190px; min-width: 150px; }
+  .panel-toolbar .input {
+    height: 38px;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    background: var(--bg-card);
+    font-size: 0.85rem;
+  }
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+  }
+
+  .table-scroll { width: 100%; overflow-x: auto; }
+  .elections-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    background: transparent;
+  }
+  .elections-table thead th {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-size: 0.67rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .elections-table tbody td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    vertical-align: middle;
+  }
+  .elections-table tbody tr:last-child td { border-bottom: 0; }
+  .elections-table tbody tr { transition: background var(--transition-fast); }
+  .elections-table tbody tr:hover { background: var(--bg-soft); }
+  .elections-table th:first-child,
+  .elections-table td:first-child { padding-left: 1.35rem; }
+  .elections-table th:last-child,
+  .elections-table td:last-child { padding-right: 1.35rem; }
+  .elections-table th:nth-child(2),
+  .elections-table td:nth-child(2) { width: 140px; }
+  .elections-table th:nth-child(3),
+  .elections-table td:nth-child(3) { width: 90px; }
+  .elections-table th:nth-child(4),
+  .elections-table td:nth-child(4) { width: 110px; }
+  .elections-table th:last-child,
+  .elections-table td:last-child { width: 230px; }
+  .elections-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .elections-table td.num { color: var(--text-primary); font-weight: 600; }
+  .elections-table .actions-col { text-align: right; }
+
+  .election-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .election-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border: 1px solid #e0e7ff;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #f5f7ff 0%, #eef2ff 100%);
+    color: var(--primary);
+    font-size: 1rem;
+  }
+  .election-info { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
+  .election-name {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .election-org {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .election-org i { font-size: 0.72rem; }
+
+  .row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.3rem;
+  }
+  .row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    text-decoration: none;
+    transition: background var(--transition-fast), border-color var(--transition-fast),
+                color var(--transition-fast);
+  }
+  .row-action:hover {
+    border-color: #c7d2fe;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+  }
+  .row-action:focus-visible { outline: none; box-shadow: var(--ring); }
+  .row-action.primary {
+    width: auto;
+    gap: 0.35rem;
+    padding: 0 0.6rem;
+    border-color: var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .row-action.primary:hover {
+    border-color: #c7d2fe;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+  }
+
+  .panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    flex-wrap: wrap;
+    padding: 0.8rem 1.35rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-soft);
+    color: var(--text-tertiary);
+    font-size: 0.76rem;
+  }
+  .foot-note { display: inline-flex; align-items: center; gap: 0.38rem; }
+  .foot-note i { color: var(--text-muted); }
+  .foot-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--primary-dark);
+    font-size: 0.76rem;
+    font-weight: 650;
+    text-decoration: none;
+  }
+  .foot-link:hover { text-decoration: underline; }
+  .org-chips { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .org-label {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .org-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.73rem;
+    font-weight: 550;
+    line-height: 1.45;
+  }
+  .org-chip i { color: var(--text-muted); font-size: 0.7rem; }
+
+  .dash-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 2.8rem 1.25rem;
+    text-align: center;
+  }
+  .dash-empty .empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin-bottom: 0.15rem;
+    border: 1px solid #e0e7ff;
+    border-radius: 14px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 1.35rem;
+  }
+  .dash-empty h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .dash-empty p {
+    margin: 0;
+    max-width: 44ch;
+    color: var(--text-tertiary);
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+  .dash-empty .empty-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-top: 0.35rem; }
+
+  /* --------------------------- Responsive ------------------------ */
+  @media (max-width: 1080px) {
+    .dash-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 760px) {
+    .dash { gap: 1.15rem; }
+    .dash-header { align-items: flex-start; gap: 1rem; }
+    .dash-heading h1 { font-size: 1.55rem; }
+    .dash-actions { width: 100%; }
+    .panel-head { padding: 1rem 1rem 0.85rem; }
+    .panel-toolbar { padding: 0.75rem 1rem; }
+    .filter-search { flex: 1 1 100%; max-width: none; }
+    .filter-state { flex: 1 1 170px; }
+    .toolbar-actions { margin-left: 0; }
+    .attention-row { flex-wrap: wrap; gap: 0.55rem 0.8rem; padding: 0.8rem 1rem; }
+    .attention-main { flex-basis: calc(100% - 20px); }
+    .attention-state { margin-left: 20px; }
+    .attention-action { margin-left: auto; }
+    .approvals-callout { margin: 0 1rem 0.8rem; }
+    .panel-foot { padding: 0.75rem 1rem; }
+    .elections-table th:first-child,
+    .elections-table td:first-child { padding-left: 1rem; }
+    .elections-table th:last-child,
+    .elections-table td:last-child { padding-right: 1rem; }
+  }
+
+  @media (max-width: 520px) {
+    .dash-metrics { grid-template-columns: 1fr; }
+    .metric { padding: 0.95rem 1rem; }
+    .metric-value { font-size: 1.6rem; }
+    .metric-hint { white-space: normal; }
+    .attention-main { flex-basis: 100%; }
+    .attention-state { margin-left: 18px; }
+  }
+</style>
+
+<div class="dash">
+  <header class="dash-header">
+    <div class="dash-heading">
+      <span class="dash-eyebrow"><i class="bi bi-shield-lock"></i> Administration console</span>
+      <h1>Election Dashboard</h1>
+      <p class="dash-sub">
+        Signed in as <strong>{{ role_label }}</strong>.
+        {% if can_manage_any %}
+          Manage elections, polling operations and audits from one place.
+        {% else %}
+          You have visibility of the elections in your scope.
+        {% endif %}
+      </p>
+    </div>
+    <div class="dash-actions">
+      {% if decidable_count %}
+        <a class="btn btn-outline" href="{% url 'approvals_inbox' %}">
+          <i class="bi bi-shield-check"></i> Approvals
+          <span class="action-count">{{ decidable_count }}</span>
+        </a>
       {% endif %}
-    </aside>
-    <div class="admin-content">
-      <h1>Election dashboard</h1>
-      <table>
-        <thead><tr><th>Election</th><th>State</th><th>Voters</th><th>Candidates</th><th></th></tr></thead>
+      {% if can_manage_any %}
+        <a class="btn btn-primary" href="{% url 'election_create' %}">
+          <i class="bi bi-plus-lg"></i> New election
+        </a>
+      {% endif %}
+    </div>
+  </header>
+
+  <section class="dash-metrics" aria-label="Election overview">
+    <a class="metric metric-total" href="{% url 'dashboard' %}">
+      <span class="metric-top">
+        <span class="metric-label">Elections</span>
+        <span class="metric-icon"><i class="bi bi-collection"></i></span>
+      </span>
+      <span class="metric-value">{{ summary.total }}</span>
+      <span class="metric-hint">All elections in your scope</span>
+    </a>
+    <a class="metric metric-open" href="{% url 'dashboard' %}?state=open">
+      <span class="metric-top">
+        <span class="metric-label">Open now</span>
+        <span class="metric-icon"><i class="bi bi-broadcast"></i></span>
+      </span>
+      <span class="metric-value">{{ summary.open }}</span>
+      <span class="metric-hint">Accepting ballots</span>
+    </a>
+    <a class="metric metric-scheduled" href="{% url 'dashboard' %}?state=scheduled">
+      <span class="metric-top">
+        <span class="metric-label">Scheduled</span>
+        <span class="metric-icon"><i class="bi bi-calendar2-week"></i></span>
+      </span>
+      <span class="metric-value">{{ summary.scheduled }}</span>
+      <span class="metric-hint">Approved and ready to open</span>
+    </a>
+    <a class="metric metric-attention{% if not summary.attention %} is-clear{% endif %}" href="{% url 'operations' %}">
+      <span class="metric-top">
+        <span class="metric-label">Needs attention</span>
+        <span class="metric-icon">
+          <i class="bi {% if summary.attention %}bi-exclamation-triangle{% else %}bi-check2-circle{% endif %}"></i>
+        </span>
+      </span>
+      <span class="metric-value">{{ summary.attention }}</span>
+      <span class="metric-hint">
+        {% if summary.attention %}Elections needing review or fixes{% else %}No blocking issues{% endif %}
+      </span>
+    </a>
+  </section>
+
+  {% if attention or decidable_count %}
+    <section class="dash-panel attention-panel" aria-labelledby="attentionHeading">
+      <div class="panel-head">
+        <div class="panel-title">
+          <h2 id="attentionHeading">
+            <span class="attention-title-icon"><i class="bi bi-exclamation-triangle"></i></span>
+            Needs your attention
+          </h2>
+          <p>Elections that need a decision or setup fix before the next step.</p>
+        </div>
+        <span class="panel-count">{{ attention_count }} election{{ attention_count|pluralize }}</span>
+      </div>
+
+      {% if decidable_count %}
+        <div class="approvals-callout">
+          <i class="bi bi-shield-exclamation"></i>
+          <span><strong>{{ decidable_count }} approval{{ decidable_count|pluralize }}</strong> waiting for your decision.</span>
+          <a class="callout-link" href="{% url 'approvals_inbox' %}">Review now <i class="bi bi-arrow-right"></i></a>
+        </div>
+      {% endif %}
+
+      <div class="attention-list">
+        {% for row in attention %}
+          <div class="attention-row {% if row.blocking %}is-blocking{% elif row.pending %}is-warning{% else %}is-ok{% endif %}">
+            {% if row.blocking %}
+              <span class="severity-dot blocking" title="Blocking issues" aria-hidden="true"></span>
+            {% elif row.pending %}
+              <span class="severity-dot warning" title="Pending approval" aria-hidden="true"></span>
+            {% else %}
+              <span class="severity-dot ok" title="Warnings only" aria-hidden="true"></span>
+            {% endif %}
+
+            <div class="attention-main">
+              <a class="attention-title" href="{% url 'election_config' row.election.pk %}">{{ row.election.title }}</a>
+              <div class="attention-meta">
+                <span><i class="bi bi-building"></i> {{ row.election.organization.name }}</span>
+                <span>
+                  {% if row.report.next_action %}
+                    Next: {{ row.report.next_action.label }}
+                  {% else %}
+                    Review election setup
+                  {% endif %}
+                </span>
+                {% if row.pending %}
+                  <span>{{ row.pending }} pending approval{{ row.pending|pluralize }}</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <span class="badge attention-state {% if row.election.state_badge %}{{ row.election.state_badge }}{% else %}badge-closed{% endif %}">{{ row.election.get_state_display }}</span>
+
+            <div class="attention-action">
+              {% if row.election.state == "draft" %}
+                <a class="action-chip primary" href="{% url 'election_config' row.election.pk %}#positions"><i class="bi bi-plus-square"></i> Add position</a>
+              {% elif row.election.state == "registration" %}
+                <a class="action-chip primary" href="{% url 'election_config' row.election.pk %}#candidates"><i class="bi bi-person-plus"></i> Add candidates</a>
+              {% elif row.election.state == "config_review" %}
+                {% if can_approve_any %}
+                  <a class="action-chip success" href="{% url 'approvals_inbox' %}"><i class="bi bi-shield-check"></i> Approve</a>
+                {% else %}
+                  <span class="action-chip"><i class="bi bi-hourglass-split"></i> Awaiting approval</span>
+                {% endif %}
+              {% elif row.election.state == "approved" %}
+                <a class="action-chip primary" href="{% url 'election_config' row.election.pk %}#schedule"><i class="bi bi-calendar-plus"></i> Schedule</a>
+              {% elif row.election.state == "scheduled" %}
+                <a class="action-chip success" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-unlock"></i> Open voting</a>
+              {% elif row.election.state == "open" %}
+                <a class="action-chip warning" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-lock"></i> Close voting</a>
+              {% elif row.election.state == "closed" %}
+                <a class="action-chip primary" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-arrow-repeat"></i> Reconcile</a>
+              {% elif row.election.state == "reconciliation" %}
+                <a class="action-chip primary" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-clipboard-check"></i> Submit review</a>
+              {% elif row.election.state == "review" %}
+                <a class="action-chip success" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-award"></i> Certify</a>
+              {% elif row.election.state == "certified" %}
+                <a class="action-chip success" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-globe"></i> Publish</a>
+              {% elif row.election.state == "published" %}
+                <a class="action-chip" href="{% url 'election_config' row.election.pk %}#actions"><i class="bi bi-archive"></i> Archive</a>
+              {% else %}
+                <a class="action-chip" href="{% url 'election_config' row.election.pk %}">Open workspace</a>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="panel-foot">
+        <span class="foot-note">
+          <i class="bi bi-info-circle"></i>
+          Showing {{ attention|length }} of {{ attention_count }} election{{ attention_count|pluralize }} needing attention.
+        </span>
+        {% if attention_count > attention|length %}
+          <a class="foot-link" href="{% url 'operations' %}">See all <i class="bi bi-arrow-right"></i></a>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="dash-panel" aria-labelledby="electionsHeading">
+    <div class="panel-head">
+      <div class="panel-title">
+        <h2 id="electionsHeading">Elections</h2>
+        <p>Open an election workspace to configure, staff or monitor it.</p>
+      </div>
+      <span class="panel-count">{{ elections|length }} election{{ elections|length|pluralize }}</span>
+    </div>
+
+    <form class="panel-toolbar" method="get" role="search">
+      <label class="sr-only" for="id_q">Search elections by title</label>
+      <div class="filter-search">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        {{ form.q }}
+      </div>
+      <label class="sr-only" for="id_state">Filter elections by state</label>
+      <div class="filter-state">
+        {{ form.state }}
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-funnel"></i> Apply</button>
+        {% if form.q.value or form.state.value %}
+          <a class="btn btn-sm btn-ghost" href="{% url 'dashboard' %}"><i class="bi bi-x-lg"></i> Clear</a>
+        {% endif %}
+      </div>
+    </form>
+
+    <div class="table-scroll" style="overflow-x: auto;">
+      <table class="elections-table">
+        <thead>
+          <tr>
+            <th scope="col" data-sortable>Election</th>
+            <th scope="col" data-sortable>Status</th>
+            <th scope="col" class="num" data-sortable data-type="num">Voters</th>
+            <th scope="col" class="num" data-sortable data-type="num">Candidates</th>
+            <th scope="col" class="actions-col">Actions</th>
+          </tr>
+        </thead>
         <tbody>
           {% for e in elections %}
-            <tr>
-              <td>{{ e.title }} <span class="hint">({{ e.organization.name }})</span></td>
-              <td><span class="badge {{ e.state_badge }}">{{ e.get_state_display }}</span></td>
-              <td>{{ e.voter_count }}</td>
-              <td>{{ e.candidate_count }}</td>
-              <td class="action-links">
-                {% if e.pk|stringformat:'s' in manage_ids or e.pk in manage_ids %}
-                  <a href="{% url 'election_config' e.pk %}">Configure</a>
-                  <a href="{% url 'election_voters' e.pk %}">Voters</a>
-                  <a href="{% url 'monitor' e.pk %}">Monitor</a>
-                {% endif %}
-                <a href="{% url 'election_audit' e.pk %}">Audit</a>
-                <a href="{% url 'election_detail' e.pk %}">View</a>
+            <tr data-state="{{ e.state }}">
+              <td>
+                <div class="election-cell">
+                  <span class="election-mark" aria-hidden="true"><i class="bi bi-diagram-3"></i></span>
+                  <div class="election-info">
+                    <span class="election-name">{{ e.title }}</span>
+                    <span class="election-org"><i class="bi bi-building"></i>{{ e.organization.name }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge {% if e.state_badge %}{{ e.state_badge }}{% else %}badge-closed{% endif %}">{{ e.get_state_display }}</span>
+              </td>
+              <td class="num">{{ e.voter_count }}</td>
+              <td class="num">{{ e.candidate_count }}</td>
+              <td>
+                <div class="row-actions">
+                  {% if e.pk|stringformat:'s' in manage_ids or e.pk in manage_ids %}
+                    <a class="row-action primary" href="{% url 'election_config' e.pk %}" title="Configure {{ e.title }}">
+                      <i class="bi bi-gear"></i><span>Manage</span>
+                    </a>
+                    <a class="row-action" href="{% url 'election_voters' e.pk %}" title="Voters" aria-label="Voters for {{ e.title }}">
+                      <i class="bi bi-people"></i>
+                    </a>
+                    <a class="row-action" href="{% url 'monitor' e.pk %}" title="Monitor" aria-label="Monitor {{ e.title }}">
+                      <i class="bi bi-broadcast"></i>
+                    </a>
+                    <a class="row-action" href="{% url 'election_audit' e.pk %}" title="Audit" aria-label="Audit trail for {{ e.title }}">
+                      <i class="bi bi-file-earmark-text"></i>
+                    </a>
+                    <a class="row-action" href="{% url 'election_detail' e.pk %}" title="View details" aria-label="View details for {{ e.title }}">
+                      <i class="bi bi-arrow-up-right-square"></i>
+                    </a>
+                  {% else %}
+                    <a class="row-action primary" href="{% url 'election_detail' e.pk %}" title="View {{ e.title }}">
+                      <i class="bi bi-eye"></i><span>View</span>
+                    </a>
+                    <a class="row-action" href="{% url 'election_audit' e.pk %}" title="Audit" aria-label="Audit trail for {{ e.title }}">
+                      <i class="bi bi-file-earmark-text"></i>
+                    </a>
+                  {% endif %}
+                </div>
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="5">No elections yet — create your first one.</td></tr>
+            <tr>
+              <td colspan="5">
+                <div class="dash-empty">
+                  <span class="empty-icon"><i class="bi bi-collection"></i></span>
+                  <h2>
+                    {% if form.q.value or form.state.value %}
+                      No elections match these filters
+                    {% else %}
+                      No elections yet
+                    {% endif %}
+                  </h2>
+                  <p>
+                    {% if form.q.value or form.state.value %}
+                      Try a different title or state, or clear the filters to see everything in your scope.
+                    {% elif can_manage_any %}
+                      Create your first election to start configuring positions, voters and polling stations.
+                    {% else %}
+                      Elections assigned to your organization will appear here.
+                    {% endif %}
+                  </p>
+                  <div class="empty-actions">
+                    {% if form.q.value or form.state.value %}
+                      <a class="btn btn-sm btn-outline" href="{% url 'dashboard' %}"><i class="bi bi-x-lg"></i> Clear filters</a>
+                    {% elif can_manage_any %}
+                      <a class="btn btn-sm btn-primary" href="{% url 'election_create' %}"><i class="bi bi-plus-circle"></i> Create election</a>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-  </div>
+
+    <div class="panel-foot">
+      <span class="foot-note">
+        <i class="bi bi-table"></i>
+        Showing {{ elections|length }} election{{ elections|length|pluralize }}{% if form.q.value or form.state.value %} matching your filters{% endif %}.
+      </span>
+      {% if orgs %}
+        <div class="org-chips">
+          <span class="org-label">Organizations</span>
+          {% for o in orgs %}
+            <span class="org-chip"><i class="bi bi-building"></i>{{ o.name }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </section>
 </div>
 {% endblock %}

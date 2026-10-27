@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Edit candidate · {{ candidate.full_name }} · {{ election.title }}{% endblock %}
+{% block content %}
+<style>
+  /* ---- Candidate edit (passport photograph) ---- */
+  .cand-head { display: flex; flex-direction: column; gap: 0.55rem; }
+  .cand-layout {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 1.35rem;
+    align-items: start;
+  }
+  .photo-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+  .photo-frame {
+    width: 100%;
+    aspect-ratio: 3 / 4; /* passport ratio, mirrors the ballot */
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .photo-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-frame .initials-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3.2rem;
+    font-weight: 750;
+    color: var(--primary-dark);
+    background: linear-gradient(160deg, var(--primary-light) 0%, #e0e7ff 100%);
+    user-select: none;
+  }
+  .photo-help { font-size: 0.8rem; color: var(--text-tertiary); line-height: 1.55; }
+  .photo-rules { margin: 0; padding-left: 1.1rem; font-size: 0.78rem; color: var(--text-muted); line-height: 1.7; }
+
+  .live-preview {
+    display: none;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem;
+    background: var(--bg-soft);
+    border: 1px dashed var(--border-color-strong);
+    border-radius: var(--radius-md);
+  }
+  .live-preview.visible { display: flex; }
+  .live-preview img { width: 60px; height: 80px; object-fit: cover; border-radius: var(--radius-xs); border: 1px solid var(--border-color); }
+  .live-preview .lp-meta { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.78rem; color: var(--text-tertiary); }
+  .live-preview .lp-title { font-weight: 650; color: var(--text-secondary); }
+
+  .form-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .frozen-notice {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    background: var(--warning-bg);
+    border: 1px solid #fde68a;
+    color: #92400e;
+    border-radius: var(--radius-md);
+    padding: 0.75rem 0.95rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 860px) {
+    .cand-layout { grid-template-columns: 1fr; }
+    .photo-frame { max-width: 240px; }
+  }
+</style>
+
+<div class="admin-content">
+  <div class="cand-head page-head">
+    <h1>Edit candidate — {{ candidate.full_name }}</h1>
+    <div class="meta-row">
+      <span class="badge {% if candidate.status == 'approved' %}badge-open{% elif candidate.status == 'rejected' %}badge-danger{% else %}badge-closed{% endif %}">{{ candidate.get_status_display }}</span>
+      <span class="badge badge-closed">{{ candidate.position.title }}</span>
+      <a href="{% url 'election_config' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to configuration</a>
+    </div>
+  </div>
+
+  {% if not editable %}
+    <div class="frozen-notice">
+      <i class="bi bi-lock"></i>
+      <span>Candidates can only be changed while the election is in <strong>DRAFT</strong>. This election is currently <strong>{{ election.get_state_display }}</strong>, so the form below is read-only.</span>
+    </div>
+  {% endif %}
+
+  <div class="cand-layout">
+    {# ---------------- current passport photograph ---------------- #}
+    <section class="card inline-section photo-panel">
+      <h2 class="panel-title" style="font-size: 0.95rem;"><i class="bi bi-image-alt"></i> Passport photograph</h2>
+      <div class="photo-frame">
+        {% if photo_url %}
+          <img src="{{ photo_url }}" alt="Photograph of {{ candidate.full_name }}" id="currentPhoto">
+        {% else %}
+          <span class="initials-placeholder">{{ candidate.initials }}</span>
+        {% endif %}
+      </div>
+      <p class="photo-help">Shown on the official ballot next to the candidate's name. When no photograph is uploaded, voters see the candidate's initials instead.</p>
+      <ul class="photo-rules">
+        <li>JPEG, PNG or WebP</li>
+        <li>Up to {{ photo_max_mb|floatformat:"0" }}&nbsp;MB</li>
+        <li>Passport-style, face centred</li>
+      </ul>
+    </section>
+
+    {# ---------------- candidate details ---------------- #}
+    <section class="card inline-section">
+      <h2 class="panel-title" style="font-size: 0.95rem;"><i class="bi bi-person-vcard"></i> Candidate details</h2>
+      <form method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.85rem;">
+        {% csrf_token %}
+        {{ form.as_div }}
+        <div class="live-preview" data-photo-preview>
+          <img src="" alt="Preview of the newly selected passport photograph" data-photo-preview-img>
+          <div class="lp-meta">
+            <span class="lp-title">New photograph preview</span>
+            <span data-photo-preview-name></span>
+            <span>This replaces the current photograph once you save.</span>
+          </div>
+        </div>
+        {% if editable %}
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle"></i> Save changes</button>
+            <a class="btn btn-outline" href="{% url 'election_config' election.pk %}"><i class="bi bi-x-circle"></i> Cancel</a>
+          </div>
+        {% endif %}
+      </form>
+    </section>
+  </div>
+</div>
+
+<script>
+/* Live preview of a newly selected passport photograph (before submit). */
+(function () {
+  'use strict';
+  var input = document.querySelector('[data-photo-input]');
+  var box = document.querySelector('[data-photo-preview]');
+  if (!input || !box) return;
+  var img = box.querySelector('[data-photo-preview-img]');
+  var nameEl = box.querySelector('[data-photo-preview-name]');
+  var currentUrl = null;
+  input.addEventListener('change', function () {
+    var file = input.files && input.files[0];
+    if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+    if (!file) { box.classList.remove('visible'); return; }
+    currentUrl = URL.createObjectURL(file);
+    img.src = currentUrl;
+    if (nameEl) nameEl.textContent = file.name;
+    box.classList.add('visible');
+  });
+})();
+</script>
+{% endblock %}

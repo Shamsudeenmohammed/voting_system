@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1200" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Abstract ballot box and check mark illustration">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070d22"/>
+      <stop offset="0.42" stop-color="#121c45"/>
+      <stop offset="0.78" stop-color="#312e81"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <radialGradient id="glow-indigo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#818cf8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#818cf8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-cyan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-violet" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#c084fc" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#c084fc" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="box-body" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="0.55" stop-color="#3730a3"/>
+      <stop offset="1" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="box-face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eef2ff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#c7d2fe" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c7d2fe"/>
+    </linearGradient>
+    <linearGradient id="check" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#818cf8" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#a5b4fc" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#818cf8" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+    <filter id="soft-sm" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+
+    <pattern id="dots" width="34" height="34" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="2" fill="#c7d2fe" fill-opacity="0.16"/>
+    </pattern>
+    <pattern id="grid" width="96" height="96" patternUnits="userSpaceOnUse">
+      <path d="M96 0H0V96" fill="none" stroke="#c7d2fe" stroke-opacity="0.07" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Base wash -->
+  <rect width="1920" height="1200" fill="url(#bg)"/>
+  <rect width="1920" height="1200" fill="url(#grid)"/>
+  <rect x="0" y="620" width="760" height="580" fill="url(#dots)"/>
+  <rect x="1180" y="0" width="740" height="360" fill="url(#dots)"/>
+
+  <!-- Ambient light -->
+  <circle cx="280" cy="300" r="520" fill="url(#glow-indigo)"/>
+  <circle cx="1620" cy="240" r="460" fill="url(#glow-cyan)"/>
+  <circle cx="1540" cy="1000" r="520" fill="url(#glow-violet)"/>
+  <circle cx="820" cy="880" r="380" fill="url(#glow-indigo)" opacity="0.5"/>
+
+  <!-- Concentric rings, left -->
+  <g fill="none" stroke="#c7d2fe" stroke-opacity="0.10">
+    <circle cx="300" cy="640" r="250" stroke-width="1.5"/>
+    <circle cx="300" cy="640" r="330" stroke-width="1"/>
+    <circle cx="300" cy="640" r="420" stroke-width="0.75" stroke-dasharray="4 12"/>
+  </g>
+
+  <!-- Concentric rings, right -->
+  <g fill="none" stroke="#a5b4fc" stroke-opacity="0.13">
+    <circle cx="1640" cy="520" r="300" stroke-width="1.5"/>
+    <circle cx="1640" cy="520" r="385" stroke-width="1" stroke-dasharray="3 11"/>
+    <circle cx="1640" cy="520" r="470" stroke-width="0.75"/>
+  </g>
+
+  <!-- Sweeping ribbons -->
+  <path d="M-120 930C260 770 520 1060 900 930s620-300 1120-120" fill="none" stroke="url(#ribbon)" stroke-width="2"/>
+  <path d="M-80 990C300 830 560 1120 940 990s620-300 1120-120" fill="none" stroke="url(#ribbon)" stroke-width="1" opacity="0.55"/>
+  <path d="M240 190C620 40 920 300 1280 170s520-180 800-80" fill="none" stroke="url(#ribbon)" stroke-width="1.2" opacity="0.6"/>
+
+  <!-- Soft floating blobs -->
+  <ellipse cx="1290" cy="985" rx="220" ry="64" fill="#0b1229" opacity="0.45" filter="url(#soft)"/>
+  <circle cx="640" cy="250" r="86" fill="#818cf8" opacity="0.12" filter="url(#soft-sm)"/>
+  <circle cx="1110" cy="1060" r="120" fill="#38bdf8" opacity="0.10" filter="url(#soft)"/>
+
+  <!-- Shield / check motif, left -->
+  <g transform="translate(170 330)">
+    <path d="M210 10 390 78v190c0 130-78 230-180 282C108 498 30 398 30 268V78Z"
+          fill="#ffffff" fill-opacity="0.035" stroke="#c7d2fe" stroke-opacity="0.22" stroke-width="2"/>
+    <path d="M210 54 352 108v158c0 106-62 190-142 236-80-46-142-130-142-236V108Z"
+          fill="none" stroke="#a5b4fc" stroke-opacity="0.16" stroke-width="1.5"/>
+    <path d="m132 272 58 58 122-134" fill="none" stroke="url(#check)" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>
+    <circle cx="210" cy="270" r="176" fill="none" stroke="#c7d2fe" stroke-opacity="0.08" stroke-width="1" stroke-dasharray="2 10"/>
+  </g>
+
+  <!-- Ballot box, right -->
+  <g transform="rotate(-2 1450 720)">
+    <!-- shadow -->
+    <ellipse cx="1440" cy="978" rx="270" ry="46" fill="#05081a" opacity="0.55" filter="url(#soft-sm)"/>
+
+    <!-- ballot slip entering the box -->
+    <g transform="rotate(-9 1360 470)">
+      <rect x="1225" y="205" width="330" height="390" rx="18" fill="url(#paper)" opacity="0.96"/>
+      <rect x="1225" y="205" width="330" height="390" rx="18" fill="none" stroke="#eef2ff" stroke-width="2" opacity="0.75"/>
+      <rect x="1272" y="262" width="196" height="14" rx="7" fill="#312e81" opacity="0.30"/>
+      <rect x="1272" y="300" width="150" height="12" rx="6" fill="#312e81" opacity="0.20"/>
+      <rect x="1272" y="336" width="176" height="12" rx="6" fill="#312e81" opacity="0.16"/>
+      <circle cx="1388" cy="456" r="66" fill="#eef2ff" stroke="#a5b4fc" stroke-width="3"/>
+      <path d="m1354 458 24 24 46-54" fill="none" stroke="#4338ca" stroke-width="13"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="1272" y="536" width="118" height="10" rx="5" fill="#312e81" opacity="0.16"/>
+    </g>
+
+    <!-- body -->
+    <rect x="1210" y="470" width="470" height="430" rx="42" fill="url(#box-body)"/>
+    <rect x="1210" y="470" width="470" height="430" rx="42" fill="url(#box-face)"/>
+    <rect x="1210" y="470" width="470" height="430" rx="42" fill="none" stroke="#c7d2fe" stroke-opacity="0.38" stroke-width="2"/>
+
+    <!-- top slot -->
+    <rect x="1292" y="512" width="306" height="34" rx="17" fill="#070d22"/>
+    <rect x="1298" y="518" width="294" height="10" rx="5" fill="#a5b4fc" opacity="0.30"/>
+    <rect x="1252" y="584" width="386" height="2" fill="#c7d2fe" opacity="0.18"/>
+
+    <!-- front panel -->
+    <rect x="1262" y="638" width="366" height="196" rx="24" fill="#ffffff" fill-opacity="0.06"
+          stroke="#c7d2fe" stroke-opacity="0.18" stroke-width="1.5"/>
+    <circle cx="1445" cy="736" r="64" fill="#eef2ff" fill-opacity="0.10"
+            stroke="#c7d2fe" stroke-opacity="0.35" stroke-width="2"/>
+    <path d="m1412 738 23 23 45-52" fill="none" stroke="url(#check)" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- side highlight -->
+    <rect x="1210" y="470" width="34" height="430" rx="17" fill="#ffffff" fill-opacity="0.05"/>
+  </g>
+
+  <!-- Floating ballot cards, left / bottom -->
+  <g transform="rotate(-14 790 830)">
+    <rect x="700" y="720" width="210" height="250" rx="18" fill="#eef2ff" opacity="0.10"
+          stroke="#c7d2fe" stroke-opacity="0.22"/>
+    <rect x="738" y="766" width="130" height="11" rx="5" fill="#eef2ff" opacity="0.28"/>
+    <rect x="738" y="796" width="96" height="9" rx="4" fill="#eef2ff" opacity="0.18"/>
+    <circle cx="806" cy="874" r="31" fill="none" stroke="#5eead4" stroke-opacity="0.55" stroke-width="2"/>
+    <path d="m790 875 11 11 22-26" fill="none" stroke="#5eead4" stroke-opacity="0.65" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="rotate(11 1040 300)">
+    <rect x="952" y="206" width="178" height="214" rx="16" fill="#eef2ff" opacity="0.08"
+          stroke="#c7d2fe" stroke-opacity="0.18"/>
+    <rect x="986" y="246" width="110" height="10" rx="5" fill="#eef2ff" opacity="0.24"/>
+    <rect x="986" y="274" width="78" height="8" rx="4" fill="#eef2ff" opacity="0.16"/>
+    <circle cx="1041" cy="344" r="26" fill="none" stroke="#818cf8" stroke-opacity="0.55" stroke-width="2"/>
+    <path d="m1028 345 9 9 18-21" fill="none" stroke="#a5b4fc" stroke-opacity="0.7" stroke-width="4"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Accent particles -->
+  <g fill="#c7d2fe">
+    <circle cx="560" cy="160" r="4" opacity="0.55"/>
+    <circle cx="1180" cy="120" r="3" opacity="0.40"/>
+    <circle cx="1770" cy="760" r="5" opacity="0.35"/>
+    <circle cx="1210" cy="1050" r="4" opacity="0.45"/>
+    <circle cx="470" cy="1030" r="3" opacity="0.35"/>
+    <circle cx="880" cy="560" r="3" opacity="0.30"/>
+    <circle cx="1690" cy="1040" r="3" opacity="0.40"/>
+    <circle cx="700" cy="420" r="2.5" opacity="0.35"/>
+  </g>
+
+  <!-- Corner accents -->
+  <path d="M0 0h260l-60 60H0Z" fill="#c7d2fe" opacity="0.05"/>
+  <path d="M1920 1200h-300l70-70h230Z" fill="#c7d2fe" opacity="0.06"/>
+</svg>

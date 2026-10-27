@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from organizations.models import Organization, OrganizationMembership
@@ -326,3 +327,200 @@ class RegistryTests(BaseVotingTestCase):
         )
         self.assertTrue(v_ok.eligible_for(election))
         self.assertFalse(v_bad.eligible_for(election))
+
+
+class RegistryImportTests(BaseVotingTestCase):
+    """Downloadable register template and file (CSV/XLSX) upload."""
+
+    def _messages(self, response) -> list[str]:
+        from django.contrib.messages import get_messages
+
+        return [str(m) for m in get_messages(response.wsgi_request)]
+
+    def _registration_election(self) -> Election:
+        election = self.make_election()
+        return transition(election, Election.STATE_REGISTRATION, actor=self.official)
+
+    # -- template download ------------------------------------------------
+
+    def test_template_download_csv(self):
+        election = self._registration_election()
+        self.client.force_login(self.official)
+        r = self.client.get(reverse("voter_registry_template", args=[election.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/csv", r["Content-Type"])
+        self.assertIn("attachment", r["Content-Disposition"])
+        lines = r.content.decode("utf-8").strip().splitlines()
+        self.assertEqual(lines[0], "voter_id,full_name,email,unit")
+        self.assertIn("V001,Ada Lovelace,ada@example.org,Science Faculty", lines)
+
+    def test_template_download_xlsx(self):
+        election = self._registration_election()
+        self.client.force_login(self.official)
+        r = self.client.get(
+            reverse("voter_registry_template", args=[election.pk]) + "?format=xlsx"
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("spreadsheetml", r["Content-Type"])
+
+        import io
+
+        import openpyxl
+
+        wb = openpyxl.load_workbook(io.BytesIO(r.content), read_only=True)
+        rows = list(wb.active.iter_rows(values_only=True))
+        self.assertEqual(rows[0], ("voter_id", "full_name", "email", "unit"))
+        self.assertEqual(rows[1][0], "V001")
+
+    def test_template_download_scoped(self):
+        election = self._registration_election()
+        self.client.force_login(self.outsider)
+        r = self.client.get(reverse("voter_registry_template", args=[election.pk]))
+        self.assertEqual(r.status_code, 403)
+
+    def test_template_round_trip_import(self):
+        """Download the template, fill it, upload it back."""
+        import io
+
+        import openpyxl
+
+        from .voter_import import template_xlsx_bytes
+
+        election = self._registration_election()
+        wb = openpyxl.load_workbook(io.BytesIO(template_xlsx_bytes()))
+        ws = wb.active
+        ws.append(("V900", "Test User", "test@example.org", "Law Faculty"))
+        buffer = io.BytesIO()
+        wb.save(buffer)
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.official)
+        r = self.client.post(
+            reverse("voter_file_add", args=[election.pk]),
+            {
+                "file": SimpleUploadedFile(
+                    "register.xlsx",
+                    buffer.getvalue(),
+                    content_type=(
+                        "application/vnd.openxmlformats-officedocument"
+                        ".spreadsheetml.sheet"
+                    ),
+                )
+            },
+        )
+        self.assertEqual(r.status_code, 302, self._messages(r))
+        self.assertEqual(election.voters.count(), 4)  # 3 template rows + 1 added
+
+    # -- file upload ------------------------------------------------------
+
+    def _upload_csv(self, election: Election, content: str, **extra):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.official)
+        return self.client.post(
+            reverse("voter_file_add", args=[election.pk]),
+            {
+                "file": SimpleUploadedFile(
+                    "register.csv", content.encode("utf-8"), content_type="text/csv"
+                ),
+                **extra,
+            },
+        )
+
+    def test_file_upload_registers_voters(self):
+        election = self._registration_election()
+        csv = (
+            "voter_id,full_name,email,unit\n"
+            "F001,Ada Lovelace,ada@example.org,Science Faculty\n"
+            "F002,Grace Hopper,,Engineering Faculty\n"
+        )
+        r = self._upload_csv(election, csv)
+        self.assertEqual(r.status_code, 302, self._messages(r))
+        self.assertEqual(election.voters.count(), 2)
+        voter = election.voters.get(voter_id="F002")
+        self.assertEqual(voter.organization_unit, "Engineering Faculty")
+        self.assertTrue(
+            any("2 voters registered from file" in m for m in self._messages(r)),
+            self._messages(r),
+        )
+
+    def test_file_upload_skips_existing_ids(self):
+        election = self._registration_election()
+        Voter.objects.create(election=election, voter_id="F001", full_name="Old Row")
+        csv = "voter_id,full_name\nF001,Ada Lovelace\nF002,Grace Hopper\n"
+        r = self._upload_csv(election, csv)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(election.voters.count(), 2)
+        self.assertTrue(
+            any("skipped" in m for m in self._messages(r)),
+            self._messages(r),
+        )
+        self.assertEqual(
+            election.voters.get(voter_id="F001").full_name, "Old Row"
+        )
+
+    def test_file_upload_duplicate_in_file_rejected(self):
+        election = self._registration_election()
+        csv = "voter_id,full_name\nF001,Ada Lovelace\nF001,Duplicate\n"
+        r = self._upload_csv(election, csv)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(election.voters.count(), 0)
+        self.assertTrue(
+            any("duplicate entry in file" in m for m in self._messages(r)),
+            self._messages(r),
+        )
+
+    def test_file_upload_requires_id_or_name(self):
+        election = self._registration_election()
+        csv = "voter_id,full_name,email\n,,"
+        r = self._upload_csv(election, csv)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(election.voters.count(), 0)
+
+    def test_file_upload_rejects_unsupported_type(self):
+        election = self._registration_election()
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.official)
+        r = self.client.post(
+            reverse("voter_file_add", args=[election.pk]),
+            {"file": SimpleUploadedFile("register.pdf", b"%PDF-1.4")},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(election.voters.count(), 0)
+        self.assertTrue(
+            any("Unsupported file type" in m for m in self._messages(r)),
+            self._messages(r),
+        )
+
+    def test_file_upload_requires_file(self):
+        election = self._registration_election()
+        self.client.force_login(self.official)
+        r = self.client.post(reverse("voter_file_add", args=[election.pk]), {})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(election.voters.count(), 0)
+
+    def test_registry_page_offers_template_and_file_input(self):
+        election = self._registration_election()
+        Voter.objects.create(election=election, voter_id="P001", full_name="Pre")
+        self.client.force_login(self.official)
+        r = self.client.get(reverse("election_voters", args=[election.pk]))
+        self.assertEqual(r.status_code, 200)
+        template_url = reverse("voter_registry_template", args=[election.pk])
+        self.assertContains(r, template_url)  # download CSV link
+        self.assertContains(r, f"{template_url}?format=xlsx")
+        self.assertContains(r, 'type="file"')  # file chooser
+        self.assertContains(r, "multipart/form-data")
+
+    def test_file_upload_only_during_registration(self):
+        election = self.make_election()  # DRAFT, not REGISTRATION
+        r = self._upload_csv(
+            election, "voter_id,full_name\nF001,Ada Lovelace\n"
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(election.voters.count(), 0)
+        self.assertTrue(
+            any("REGISTRATION" in m for m in self._messages(r)),
+            self._messages(r),
+        )

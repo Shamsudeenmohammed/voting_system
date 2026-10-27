@@ -1,0 +1,509 @@
+/* ==========================================================================
+   VoteSys back-office theme (django-jazzmin)
+
+   Loaded via JAZZMIN_SETTINGS["custom_css"] and applied to every page of the
+   Django admin mounted at /watch/.  It re-skins Jazzmin/AdminLTE 4 so the
+   back office matches the product UI (templates/base.html): Inter typeface,
+   indigo accents, a navy sidebar, soft borders and rounded corners.
+
+   Only presentation is changed here - no behaviour or permissions.
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
+/* --------------------------------------------------------------------------
+   Design tokens
+   -------------------------------------------------------------------------- */
+:root,
+[data-bs-theme="light"],
+[data-bs-theme="dark"] {
+  --vs-primary: #4f46e5;
+  --vs-primary-rgb: 79, 70, 229;
+  --vs-primary-hover: #6366f1;
+  --vs-primary-dark: #4338ca;
+  --vs-primary-light: #eef2ff;
+  --vs-navy-900: #0b1229;
+  --vs-navy-800: #111c3f;
+  --vs-navy-700: #1c2a57;
+  --vs-border: #e3e8f2;
+  --vs-border-strong: #cbd5e1;
+  --vs-text: #0f172a;
+  --vs-text-secondary: #475569;
+  --vs-text-muted: #94a3b8;
+  --vs-bg: #f4f6fb;
+  --vs-radius: 14px;
+  --vs-radius-sm: 10px;
+  --vs-shadow-sm: 0 1px 2px rgb(15 23 42 / 6%), 0 1px 3px rgb(15 23 42 / 4%);
+  --vs-shadow: 0 2px 4px rgb(15 23 42 / 4%), 0 8px 20px -6px rgb(15 23 42 / 8%);
+  --vs-ring: 0 0 0 3px rgb(99 102 241 / 25%);
+
+  /* Align Bootstrap's own colour system with the product palette. */
+  --bs-primary: var(--vs-primary);
+  --bs-primary-rgb: var(--vs-primary-rgb);
+  --bs-link-color: var(--vs-primary);
+  --bs-link-color-rgb: var(--vs-primary-rgb);
+  --bs-link-hover-color: var(--vs-primary-dark);
+  --bs-link-hover-color-rgb: 67, 56, 202;
+  --bs-body-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", sans-serif;
+  --bs-border-color: var(--vs-border);
+  --bs-border-radius: var(--vs-radius-sm);
+}
+
+body,
+.card,
+.btn,
+.form-control,
+.form-select,
+.nav-link,
+.navbar {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+}
+
+body {
+  color: var(--vs-text);
+}
+
+/* --------------------------------------------------------------------------
+   Layout / background
+   -------------------------------------------------------------------------- */
+body.bg-body-tertiary,
+body.bg-body-secondary,
+.login-page {
+  background-color: var(--vs-bg);
+  background-image: radial-gradient(1100px 500px at 85% -10%, rgb(99 102 241 / 7%), transparent 60%),
+    radial-gradient(900px 420px at -10% 0%, rgb(37 99 235 / 5%), transparent 55%);
+  background-attachment: fixed;
+}
+
+.app-content-header {
+  border-bottom: 1px solid var(--vs-border);
+  background: transparent;
+}
+
+.app-content-header h3 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--vs-text);
+}
+
+.breadcrumb {
+  font-size: 0.8rem;
+  --bs-breadcrumb-divider-color: var(--vs-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Top navbar
+   -------------------------------------------------------------------------- */
+.app-header.navbar {
+  --bs-navbar-bg: #ffffff;
+  background: rgb(255 255 255 / 92%) !important;
+  backdrop-filter: saturate(180%) blur(10px);
+  border-bottom: 1px solid var(--vs-border) !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.app-header .navbar-nav .nav-link {
+  color: var(--vs-text-secondary);
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: 9px;
+  padding: 0.4rem 0.7rem;
+}
+
+.app-header .navbar-nav .nav-link:hover,
+.app-header .navbar-nav .nav-link:focus {
+  color: var(--vs-primary-dark);
+  background: var(--vs-primary-light);
+}
+
+.app-header .form-control-navbar {
+  background: var(--vs-bg);
+  border: 1px solid var(--vs-border);
+  border-radius: var(--vs-radius-sm);
+  color: var(--vs-text);
+}
+
+.app-header .form-control-navbar:focus {
+  border-color: var(--vs-primary);
+  box-shadow: var(--vs-ring);
+  background: #fff;
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar
+   -------------------------------------------------------------------------- */
+.app-sidebar {
+  --bs-secondary-bg: transparent;
+  background: linear-gradient(180deg, var(--vs-navy-900) 0%, var(--vs-navy-800) 100%) !important;
+  box-shadow: 4px 0 24px -12px rgb(11 18 41 / 45%) !important;
+}
+
+.sidebar-brand {
+  border-bottom: 1px solid rgb(255 255 255 / 8%) !important;
+  height: auto;
+  padding: 0.9rem 0.85rem;
+}
+
+.brand-link {
+  color: #fff !important;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: none !important;
+}
+
+.brand-link .brand-image {
+  max-height: 34px;
+  margin: 0;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+.brand-link .brand-text {
+  font-weight: 700 !important;
+  font-size: 1.12rem;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.sidebar-wrapper .user-panel {
+  border-bottom: 1px solid rgb(255 255 255 / 8%) !important;
+}
+
+.sidebar-wrapper .user-panel .info a {
+  color: #e2e8f0 !important;
+  font-weight: 600;
+}
+
+.sidebar-menu .nav-header {
+  color: rgb(148 163 184 / 90%) !important;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 1rem 0.9rem 0.35rem;
+}
+
+.sidebar-menu .nav-link {
+  color: #c3cbe0;
+  border-radius: var(--vs-radius-sm);
+  margin: 1px 0.5rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.sidebar-menu .nav-link .nav-icon {
+  color: rgb(148 163 184 / 95%);
+  font-size: 0.95rem;
+  width: 1.15rem;
+  text-align: center;
+}
+
+.sidebar-menu .nav-link:hover,
+.sidebar-menu .nav-link:focus {
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.sidebar-menu .nav-link:hover .nav-icon,
+.sidebar-menu .nav-link:focus .nav-icon {
+  color: #fff;
+}
+
+.sidebar-menu .nav-link.active,
+.sidebar-menu .nav-item.menu-open > .nav-link {
+  background: linear-gradient(90deg, rgb(99 102 241 / 32%) 0%, rgb(99 102 241 / 10%) 100%);
+  color: #fff !important;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgb(129 140 248 / 30%);
+}
+
+.sidebar-menu .nav-link.active .nav-icon {
+  color: #a5b4fc;
+}
+
+.sidebar-menu .nav-header:first-child {
+  padding-top: 0.4rem;
+}
+
+/* --------------------------------------------------------------------------
+   Content: cards, tables, forms
+   -------------------------------------------------------------------------- */
+.card {
+  border: 1px solid var(--vs-border);
+  border-radius: var(--vs-radius);
+  box-shadow: var(--vs-shadow-sm);
+}
+
+.card-header {
+  background: #fff;
+  border-bottom: 1px solid var(--vs-border);
+  border-radius: var(--vs-radius) var(--vs-radius) 0 0 !important;
+  font-weight: 650;
+}
+
+.table > :not(caption) > * > * {
+  padding: 0.75rem 0.9rem;
+  border-bottom-color: var(--vs-border);
+}
+
+.table > thead > tr > th,
+.table thead th {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  color: var(--vs-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--vs-border);
+  white-space: nowrap;
+}
+
+.table-hover > tbody > tr:hover > * {
+  background: rgb(248 250 252 / 90%);
+}
+
+.form-control,
+.form-select {
+  border-color: var(--vs-border-strong);
+  border-radius: var(--vs-radius-sm);
+  padding: 0.55rem 0.8rem;
+  box-shadow: inset 0 1px 2px rgb(15 23 42 / 3%);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--vs-primary);
+  box-shadow: var(--vs-ring);
+}
+
+.form-control::placeholder {
+  color: var(--vs-text-muted);
+}
+
+label,
+.form-label {
+  font-weight: 600;
+  font-size: 0.83rem;
+  color: var(--vs-text-secondary);
+}
+
+.help,
+.helptext {
+  color: var(--vs-text-muted);
+  font-size: 0.78rem;
+}
+
+/* Jazzmin change-form tabs */
+.nav-tabs .nav-link {
+  font-weight: 600;
+  color: var(--vs-text-secondary);
+}
+.nav-tabs .nav-link.active {
+  color: var(--vs-primary-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+.btn {
+  border-radius: var(--vs-radius-sm);
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--vs-ring);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--vs-primary);
+  --bs-btn-border-color: var(--vs-primary);
+  --bs-btn-hover-bg: var(--vs-primary-hover);
+  --bs-btn-hover-border-color: var(--vs-primary-hover);
+  --bs-btn-active-bg: var(--vs-primary-dark);
+  --bs-btn-active-border-color: var(--vs-primary-dark);
+  --bs-btn-disabled-bg: var(--vs-primary);
+  --bs-btn-disabled-border-color: var(--vs-primary);
+  background-image: linear-gradient(180deg, var(--vs-primary-hover) 0%, var(--vs-primary-dark) 100%);
+  border: none;
+  box-shadow: 0 1px 2px rgb(49 46 129 / 25%), 0 8px 18px -8px rgb(79 70 229 / 55%);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-image: linear-gradient(180deg, #6d70f5 0%, var(--vs-primary) 100%);
+  transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--vs-primary-dark);
+  --bs-btn-border-color: var(--vs-primary);
+  --bs-btn-hover-bg: var(--vs-primary);
+  --bs-btn-hover-border-color: var(--vs-primary);
+  --bs-btn-active-bg: var(--vs-primary-dark);
+}
+
+.btn-success {
+  background-image: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  border: none;
+}
+.btn-danger {
+  background-image: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  border: none;
+}
+
+/* Soft / outline variants used by "Save and continue" and "History". */
+.btn-info {
+  --bs-btn-color: var(--vs-primary-dark);
+  --bs-btn-bg: var(--vs-primary-light);
+  --bs-btn-border-color: #c7d2fe;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--vs-primary);
+  --bs-btn-hover-border-color: var(--vs-primary);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--vs-primary-dark);
+  --bs-btn-active-border-color: var(--vs-primary-dark);
+  --bs-btn-disabled-color: var(--vs-text-muted);
+  --bs-btn-disabled-bg: var(--vs-primary-light);
+  --bs-btn-disabled-border-color: #c7d2fe;
+}
+
+.btn-secondary {
+  --bs-btn-color: var(--vs-text-secondary);
+  --bs-btn-bg: #fff;
+  --bs-btn-border-color: var(--vs-border-strong);
+  --bs-btn-hover-color: var(--vs-primary-dark);
+  --bs-btn-hover-bg: var(--vs-primary-light);
+  --bs-btn-hover-border-color: #a5b4fc;
+  --bs-btn-active-color: var(--vs-primary-dark);
+  --bs-btn-active-bg: var(--vs-primary-light);
+  --bs-btn-active-border-color: #a5b4fc;
+}
+
+/* Select2 (admin autocomplete / filters) */
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple {
+  border-color: var(--vs-border-strong);
+  border-radius: var(--vs-radius-sm);
+  min-height: 42px;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+  line-height: 40px;
+}
+.select2-container--default.select2-container--focus .select2-selection--single,
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+  border-color: var(--vs-primary);
+  box-shadow: var(--vs-ring);
+}
+
+/* --------------------------------------------------------------------------
+   Accents, links, alerts, pagination
+   -------------------------------------------------------------------------- */
+a {
+  color: var(--vs-primary-dark);
+}
+a:hover {
+  color: var(--vs-primary);
+}
+
+.page-link {
+  color: var(--vs-primary-dark);
+  border-radius: var(--vs-radius-sm) !important;
+  margin: 0 1px;
+}
+.page-item.active .page-link {
+  background: var(--vs-primary);
+  border-color: var(--vs-primary);
+}
+
+.badge.text-bg-primary,
+.badge.bg-primary {
+  background-color: var(--vs-primary) !important;
+}
+
+.alert {
+  border-radius: var(--vs-radius-sm);
+  border: 1px solid transparent;
+}
+.alert-success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #065f46;
+}
+.alert-danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+.alert-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.alert-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+/* Make the sidebar collapse button feel like the product's controls */
+.app-header .nav-link[data-lte-toggle="sidebar"] {
+  color: var(--vs-text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Footer - keep it quiet and drop the Jazzmin version stamp
+   -------------------------------------------------------------------------- */
+.app-footer {
+  background: transparent !important;
+  border-top: 1px solid var(--vs-border);
+  color: var(--vs-text-muted);
+  font-size: 0.8125rem;
+}
+.app-footer .float-end {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Login page (templates/admin/login.html ships its own styles; these are
+   defensive fallbacks if the stock Jazzmin login template is ever used)
+   -------------------------------------------------------------------------- */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-box {
+  width: 100%;
+  max-width: 440px;
+}
+.login-logo a {
+  color: var(--vs-text);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+.login-card-body,
+.login-box .card {
+  border-radius: var(--vs-radius);
+  border: 1px solid var(--vs-border);
+  box-shadow: 0 24px 60px -12px rgb(15 23 42 / 22%);
+}
+.login-box .btn-primary {
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive touch-ups
+   -------------------------------------------------------------------------- */
+@media (max-width: 991.98px) {
+  .app-content-header h3 {
+    font-size: 1.15rem;
+  }
+}

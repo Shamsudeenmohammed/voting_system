@@ -1,86 +1,308 @@
 {% extends "base.html" %}
 {% block title %}Results · {{ election.title }}{% endblock %}
 {% block content %}
+<style>
+  /* ---- Election results ---- */
+  .results-head { display: flex; flex-direction: column; gap: 0.55rem; }
+
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.85rem;
+  }
+  .summary-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.15rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+  .summary-item .sv { font-size: 1.5rem; font-weight: 750; letter-spacing: -0.03em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .summary-item .sl { font-size: 0.74rem; font-weight: 650; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
+  .summary-item.accent { background: linear-gradient(160deg, var(--primary-light) 0%, #fff 75%); border-color: #c7d2fe; }
+  .summary-item.accent .sv { color: var(--primary-dark); }
+
+  .locked-card { text-align: center; }
+  .locked-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid #fde68a;
+  }
+
+  .result-table td.votes { text-align: right; font-weight: 700; font-size: 1rem; font-variant-numeric: tabular-nums; }
+  .result-table td.pct { text-align: right; color: var(--text-tertiary); font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+  .result-table .bar-cell { width: 38%; min-width: 120px; padding-right: 1.25rem; }
+  .result-table tbody tr.winner td.votes { color: var(--success); }
+
+  .cand-cell { display: flex; align-items: center; gap: 1.1rem; min-width: 220px; }
+  .cand-photo { position: relative; width: 66px; height: 74px; flex: 0 0 66px; }
+  .cand-photo-frame {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border-color-strong);
+    border-radius: 12px;
+    background:
+      radial-gradient(circle at 35% 25%, rgb(129 140 248 / 30%), transparent 60%),
+      linear-gradient(150deg, var(--primary-light), #e0e7ff);
+    box-shadow: var(--shadow-xs);
+  }
+  .cand-photo-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .cand-initials {
+    color: var(--primary-dark);
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+  }
+  .cand-photo.is-winner .cand-photo-frame {
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 2px rgb(251 191 36 / 25%), 0 6px 14px -8px rgb(180 83 9 / 55%);
+  }
+
+  .winner-badge {
+    position: absolute;
+    right: -11px;
+    bottom: -7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.14rem 0.42rem;
+    border: 2px solid var(--bg-card);
+    border-radius: 999px;
+    background: linear-gradient(180deg, #fde68a 0%, #fbbf24 100%);
+    color: #78350f;
+    box-shadow: 0 4px 10px -3px rgb(180 83 9 / 55%);
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .winner-badge i { font-size: 0.64rem; }
+
+  .cand-name-wrap { min-width: 0; }
+  .cand-label { display: block; font-weight: 650; color: var(--text-primary); letter-spacing: -0.01em; }
+  .cand-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    margin-top: 0.12rem;
+    color: #b45309;
+    font-size: 0.72rem;
+    font-weight: 650;
+  }
+
+  .position-total {
+    margin-left: auto;
+    padding: 0.22rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  .recount-form { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; padding-top: 0.5rem; }
+  .recount-form .input { min-width: 220px; flex: 1; }
+
+  .hash-inline {
+    background: var(--bg-secondary);
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-xs);
+    font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace;
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .result-table .bar-cell { display: none; }
+  }
+
+  @media (max-width: 560px) {
+    .cand-cell { gap: 0.75rem; min-width: 0; }
+    .cand-photo { width: 54px; height: 62px; flex-basis: 54px; }
+    .cand-initials { font-size: 0.78rem; }
+    .winner-badge { right: -7px; bottom: -6px; font-size: 0.5rem; padding: 0.1rem 0.34rem; }
+    .position-total { display: none; }
+  }
+</style>
+
 <div class="admin-content">
-  <h1>Results — {{ election.title }}</h1>
-  <p>
-    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
-    {% if snapshot %}
-      &middot; tally v{{ snapshot.version }} ({{ snapshot.get_status_display }})
-    {% endif %}
-    &middot; <a href="{% url 'election_detail' election.pk %}">&larr; Election</a>
-  </p>
+  <div class="results-head page-head">
+    <h1>Results — {{ election.title }}</h1>
+    <div class="meta-row">
+      <span class="badge {% if election.state_badge %}{{ election.state_badge }}{% else %}badge-closed{% endif %}">{{ election.get_state_display }}</span>
+      {% if snapshot %}
+        <span class="hint">tally v{{ snapshot.version|default:"–" }} ({{ snapshot.get_status_display }})</span>
+      {% endif %}
+      <a href="{% url 'election_detail' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to election</a>
+    </div>
+  </div>
 
   {% if not visible or not snapshot %}
-    <p class="hint">Results are not public yet. They appear here once they have been
-      {% if election.results_visibility == election.VISIBILITY_AFTER_CERT %}
-        certified
-      {% else %}
-        published
-      {% endif %} by the election authority.</p>
+    <div class="card empty-state locked-card">
+      <span class="locked-icon"><i class="bi bi-lock"></i></span>
+      <h2>Results Not Public</h2>
+      <p class="hint" style="max-width: 46ch;">Results are not public yet. They appear here once they have been
+        {% if election.results_visibility == election.VISIBILITY_AFTER_CERT %}
+          certified
+        {% else %}
+          published
+        {% endif %} by the election authority.</p>
+    </div>
   {% else %}
     {% if not snapshot.reconciliation_ok %}
-      <p class="messages error">Warning: ballot reconciliation did not pass for this
-        snapshot (accepted {{ snapshot.ballots_accepted }}, counted {{ snapshot.ballots_counted }},
-        invalid {{ snapshot.ballots_invalid }}). Do not rely on these numbers until they
-        are certified.</p>
+      <div class="message error">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>Warning: ballot reconciliation did not pass for this snapshot (accepted {{ snapshot.ballots_accepted }}, counted {{ snapshot.ballots_counted }}, invalid {{ snapshot.ballots_invalid }}). Do not rely on these numbers until they are certified.</span>
+      </div>
     {% endif %}
-    <p class="hint">
-      Ballots accepted: {{ snapshot.ballots_accepted }} ·
-      Counted: {{ snapshot.ballots_counted }} ·
-      Invalid/spoiled: {{ snapshot.ballots_invalid }} ·
-      Config hash <code>{{ snapshot.config_hash|slice:":16" }}…</code>
-    </p>
 
-    {% for pos in snapshot.payload.positions %}
-      <section class="position-section card">
-        <div class="position-header"><h2>{{ pos.title }}</h2></div>
-        <table>
-          <thead><tr><th>Candidate</th><th>Votes</th></tr></thead>
-          <tbody>
-            {% for c in pos.candidates %}
-              <tr><td>{{ c.full_name }}</td><td><strong>{{ c.votes }}</strong></td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <p class="hint">Undervotes (blank): {{ pos.totals.undervotes }} ·
-           Overvotes: {{ pos.totals.overvotes }}</p>
+    <div class="summary-strip">
+      <div class="summary-item accent">
+        <span class="sv">{{ snapshot.ballots_accepted }}</span>
+        <span class="sl"><i class="bi bi-envelope-check"></i> Ballots accepted</span>
+      </div>
+      <div class="summary-item">
+        <span class="sv">{{ snapshot.ballots_counted }}</span>
+        <span class="sl"><i class="bi bi-list-check"></i> Counted</span>
+      </div>
+      <div class="summary-item">
+        <span class="sv">{{ snapshot.ballots_invalid }}</span>
+        <span class="sl"><i class="bi bi-x-octagon"></i> Invalid / spoiled</span>
+      </div>
+      <div class="summary-item">
+        <span class="sv" style="font-size: 0.85rem; word-break: break-all; padding-top: 0.35rem;"><code class="hash-inline">{{ snapshot.config_hash|slice:":16" }}…</code></span>
+        <span class="sl"><i class="bi bi-fingerprint"></i> Config hash</span>
+      </div>
+    </div>
+
+    {% for pos in positions %}
+      <section class="card inline-section">
+        <div class="position-header">
+          <h2>
+            {{ pos.title }}
+            <span class="position-total"><i class="bi bi-check2-square"></i> {{ pos.total_votes }} vote{{ pos.total_votes|pluralize }} counted</span>
+          </h2>
+        </div>
+        <div class="table-wrap">
+          <table class="result-table">
+            <thead><tr><th>Candidate</th><th class="bar-cell"></th><th style="text-align: right;">Votes</th><th style="text-align: right;">Share</th></tr></thead>
+            <tbody data-position-results>
+              {% for c in pos.candidates %}
+                <tr{% if c.leading %} class="winner"{% endif %} data-votes="{{ c.votes }}">
+                  <td>
+                    <div class="cand-cell">
+                      <div class="cand-photo{% if c.leading %} is-winner{% endif %}">
+                        <div class="cand-photo-frame">
+                          {% if c.photo_url %}
+                            <img src="{{ c.photo_url }}" alt="Photograph of {{ c.full_name }}" loading="lazy" onerror="this.hidden=true; this.nextElementSibling.hidden=false;">
+                            <span class="cand-initials" hidden>{{ c.initials }}</span>
+                          {% else %}
+                            <span class="cand-initials">{{ c.initials }}</span>
+                          {% endif %}
+                        </div>
+                        {% if c.leading %}
+                          <span class="winner-badge" title="Congratulations, {{ c.full_name }}">
+                            <i class="bi bi-trophy-fill" aria-hidden="true"></i>
+                            {% if c.tied %}Tie{% elif results_final %}Winner{% else %}Leading{% endif %}
+                          </span>
+                        {% endif %}
+                      </div>
+                      <div class="cand-name-wrap">
+                        <span class="cand-label">{{ c.full_name }}</span>
+                        {% if c.leading %}
+                          <span class="cand-note">
+                            <i class="bi bi-stars" aria-hidden="true"></i>
+                            {% if c.tied %}Tied for first place{% elif results_final %}Congratulations!{% else %}Currently leading{% endif %}
+                          </span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </td>
+                  <td class="bar-cell">
+                    <div class="bar"><div class="fill" style="width: {{ c.percent|floatformat:1 }}%;" data-bar data-width="{{ c.percent|floatformat:1 }}%"></div></div>
+                  </td>
+                  <td class="votes">{{ c.votes }}</td>
+                  <td class="pct">{{ c.percent|floatformat:1 }}%</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin: 0;">Undervotes (blank): {{ pos.totals.undervotes }} · Overvotes: {{ pos.totals.overvotes }}</p>
       </section>
     {% endfor %}
 
-    <p class="action-links">
-      <a class="btn btn-outline" href="{% url 'verify' election.pk snapshot.version %}">Verify count</a>
-      <a class="btn btn-outline" href="{% url 'export_snapshot' election.pk snapshot.version %}">Download signed JSON</a>
-    </p>
+    {% if snapshot.version %}
+      <div class="action-links">
+        <a class="btn btn-outline" href="{% url 'verify' election.pk snapshot.version %}"><i class="bi bi-check-circle"></i> Verify count</a>
+        <a class="btn btn-outline" href="{% url 'export_snapshot' election.pk snapshot.version %}"><i class="bi bi-download"></i> Download signed JSON</a>
+      </div>
+    {% else %}
+      <p class="hint" style="margin: 0;">Live, uncertified count — a signed snapshot becomes available once the count is run for reconciliation.</p>
+    {% endif %}
   {% endif %}
 
   {% if privileged and versions %}
     <section class="card inline-section">
-      <h2>Snapshot history (officials)</h2>
-      <table>
-        <thead><tr><th>Version</th><th>Status</th><th>Computed</th><th>Ballots</th><th></th></tr></thead>
-        <tbody>
-          {% for s in versions %}
-            <tr>
-              <td>v{{ s.version }}</td>
-              <td>{{ s.get_status_display }}</td>
-              <td>{{ s.computed_at|date:"Y-m-d H:i" }}</td>
-              <td>{{ s.ballots_accepted }}</td>
-              <td class="action-links">
-                <a href="{% url 'snapshot_detail' election.pk s.version %}">Detail</a>
-                <a href="{% url 'verify' election.pk s.version %}">Verify</a>
-                <a href="{% url 'export_snapshot' election.pk s.version %}">Export</a>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <form method="post" action="{% url 'recount' election.pk %}" class="inline">
+      <h2 class="panel-title" style="display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 700;"><i class="bi bi-clock-history" style="color: var(--primary);"></i> Snapshot History (Officials)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th data-sortable>Version</th><th data-sortable>Status</th><th data-sortable>Computed</th><th data-sortable data-type="num">Ballots</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for s in versions %}
+              <tr>
+                <td><strong>v{{ s.version }}</strong></td>
+                <td><span class="badge badge-category">{{ s.get_status_display }}</span></td>
+                <td style="white-space: nowrap;">{{ s.computed_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ s.ballots_accepted }}</td>
+                <td class="action-links">
+                  <a href="{% url 'snapshot_detail' election.pk s.version %}"><i class="bi bi-eye"></i> Detail</a>
+                  <a href="{% url 'verify' election.pk s.version %}"><i class="bi bi-check-circle"></i> Verify</a>
+                  <a href="{% url 'export_snapshot' election.pk s.version %}"><i class="bi bi-download"></i> Export</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <form method="post" action="{% url 'recount' election.pk %}" class="recount-form">
         {% csrf_token %}
         <input class="input" name="reason" placeholder="Reason for recount (audited)">
-        <button class="btn btn-sm btn-primary" type="submit">Run recount</button>
+        <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-clockwise"></i> Run recount</button>
       </form>
     </section>
   {% endif %}
 </div>
+
+<script>
+(function () {
+  'use strict';
+  /* The percentages and winner marks are rendered server-side; animate the
+     bars from zero so the result still reads correctly without JavaScript. */
+  document.querySelectorAll('tbody[data-position-results] [data-bar]').forEach(function (fill) {
+    var target = fill.getAttribute('data-width') || '0%';
+    fill.style.width = '0%';
+    requestAnimationFrame(function () { fill.style.width = target; });
+  });
+})();
+</script>
 {% endblock %}

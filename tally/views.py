@@ -13,11 +13,132 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from audit import services as audit
-from elections.models import Election
+from elections.models import Candidate, Election
 from organizations.roles import can_manage_election, can_view_results_early, is_system_admin
 
 from . import services
 from .models import TallySnapshot
+
+
+def _as_int(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+class _LiveCountView:
+    """Read-only adapter presenting a live count as a snapshot-like object.
+
+    Used when the election is open and results are shown live: the stored
+    snapshot may be stale (certified before later votes were cast), so we
+    compute a fresh count instead of displaying outdated numbers.
+    """
+
+    def __init__(self, payload: dict):
+        totals = payload.get("totals", {})
+        self.payload = payload
+        self.version = None
+        self.status = "live"
+        self.ballots_accepted = totals.get("ballots_accepted", 0)
+        self.ballots_counted = totals.get("ballots_valid", 0)
+        self.ballots_invalid = totals.get("ballots_invalid", 0)
+        self.config_hash = payload.get("config_hash", "")
+        self.reconciliation_ok = totals.get("reconciliation_ok", False)
+
+    def get_status_display(self) -> str:
+        return "Live (uncertified)"
+
+    def __str__(self) -> str:
+        return f"live count ({self.ballots_accepted} ballots)"
+
+
+def _initials(full_name: str) -> str:
+    words = [word for word in (full_name or "").split() if word]
+    return "".join(word[0].upper() for word in words[:2]) or "–"
+
+
+def _photo_url(candidate) -> str:
+    """Media URL for a candidate photograph, or "" when there is none."""
+    if candidate is None or not candidate.photo:
+        return ""
+    try:
+        return candidate.photo.url
+    except (ValueError, AttributeError):
+        return ""
+
+
+def _display_positions(snapshot, election) -> list[dict]:
+    """Enrich snapshot rows with presentation data (never stored in the tally).
+
+    Photographs and display percentages are deliberately resolved at render
+    time.  The signed snapshot payload stays untouched, so adding visuals can
+    never invalidate its hash or signature.
+    """
+    if snapshot is None:
+        return []
+
+    raw_positions = snapshot.payload.get("positions") or []
+    candidate_ids = [
+        row.get("id")
+        for position in raw_positions
+        for row in (position.get("candidates") or [])
+        if row.get("id")
+    ]
+    candidate_map = {}
+    if candidate_ids:
+        candidate_map = {
+            str(candidate.pk): candidate
+            for candidate in Candidate.objects.filter(
+                position__election=election, pk__in=candidate_ids
+            ).only("id", "full_name", "photo")
+        }
+
+    positions = []
+    for position in raw_positions:
+        rows = []
+        for row in position.get("candidates") or []:
+            full_name = row.get("full_name") or ""
+            candidate = candidate_map.get(str(row.get("id")))
+            rows.append(
+                {
+                    "id": row.get("id"),
+                    "full_name": full_name,
+                    "votes": _as_int(row.get("votes")),
+                    "photo_url": _photo_url(candidate),
+                    "initials": (
+                        candidate.initials if candidate else _initials(full_name)
+                    ),
+                }
+            )
+
+        totals = position.get("totals") or {}
+        total_votes = _as_int(totals.get("votes_counted"))
+        if total_votes == 0:
+            total_votes = sum(row["votes"] for row in rows)
+
+        top_votes = max((row["votes"] for row in rows), default=0)
+        top_count = sum(
+            1 for row in rows if row["votes"] == top_votes and top_votes > 0
+        )
+        for row in rows:
+            row["percent"] = (
+                round(row["votes"] * 100 / total_votes, 1) if total_votes else 0.0
+            )
+            row["leading"] = top_votes > 0 and row["votes"] == top_votes
+            row["tied"] = row["leading"] and top_count > 1
+
+        positions.append(
+            {
+                "id": position.get("id"),
+                "title": position.get("title") or "",
+                "max_choices": _as_int(position.get("max_choices")) or 1,
+                "candidates": rows,
+                "totals": totals,
+                "total_votes": total_votes,
+            }
+        )
+    return positions
 
 
 def _latest_publishable(election):
@@ -44,6 +165,14 @@ def results(request, pk):
     visible = published or live or privileged
     if not visible:
         snapshot = None
+
+    # For open elections with live visibility, show a fresh count instead of a
+    # potentially stale stored snapshot (e.g. certified before later votes
+    # were cast, or after the election was reopened).
+    if live:
+        live_payload = services.live_count(election)
+        snapshot = _LiveCountView(live_payload)
+
     versions = []
     if privileged:
         versions = TallySnapshot.objects.filter(election=election).order_by("-version")
@@ -53,6 +182,10 @@ def results(request, pk):
         {
             "election": election,
             "snapshot": snapshot,
+            "positions": _display_positions(snapshot, election),
+            "results_final": bool(
+                snapshot and snapshot.status == TallySnapshot.STATUS_CERTIFIED
+            ),
             "visible": visible,
             "published": published,
             "live": live,

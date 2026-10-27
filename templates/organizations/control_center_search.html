@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}System search · VoteSys{% endblock %}
+{% block content %}
+<style>
+  .search-hero { display: flex; gap: 0.75rem; align-items: center; max-width: 720px; }
+  .search-hero .search-box { flex: 1; }
+  .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.35rem; align-items: start; }
+  .result-card { display: flex; flex-direction: column; gap: 0.5rem; }
+  .result-card > h2 { font-size: 1.02rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.35rem; }
+  .result-card > h2 i { color: var(--primary); }
+  .result-card > h2 .count { margin-left: auto; font-size: 0.75rem; font-weight: 700; color: var(--text-tertiary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 999px; padding: 0.1rem 0.55rem; }
+  .result-row { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; padding: 0.55rem 0; border-bottom: 1px dashed var(--border-color); font-size: 0.85rem; }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .meta { color: var(--text-tertiary); font-size: 0.78rem; }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1><i class="bi bi-search"></i> System search</h1>
+    <p class="sub">Search every organization, person and election across all tenants. Results link straight into the relevant console page.</p>
+  </div>
+
+  <form method="get" class="search-hero" role="search">
+    <div class="search-box">
+      <i class="bi bi-search"></i>
+      <input class="input" type="search" name="q" value="{{ q }}" placeholder="Organization, username, email or election title" autofocus>
+    </div>
+    <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> Search</button>
+  </form>
+
+  {% if searched %}
+    <p class="hint">{{ total }} result(s) for “{{ q }}”.</p>
+    <div class="result-grid">
+      <section class="card result-card">
+        <h2><i class="bi bi-buildings"></i> Organizations <span class="count">{{ organizations|length }}</span></h2>
+        {% for o in organizations %}
+          <div class="result-row">
+            <span><strong>{{ o.name }}</strong> <span class="meta">· {{ o.get_kind_display }}{% if not o.is_active %} · inactive{% endif %}</span></span>
+            <a class="back-link" href="{% url 'manage_organizations' %}?edit={{ o.pk }}">Open &rarr;</a>
+          </div>
+        {% empty %}<p class="hint">No organizations matched.</p>{% endfor %}
+      </section>
+
+      <section class="card result-card">
+        <h2><i class="bi bi-people"></i> People <span class="count">{{ users|length }}</span></h2>
+        {% for u in users %}
+          <div class="result-row">
+            <span><strong>{{ u.get_username }}</strong> <span class="meta">{% if u.get_full_name %}· {{ u.get_full_name }}{% endif %}{% if u.email %} · {{ u.email }}{% endif %}{% if u.is_superuser %} · Super Admin{% elif u.is_staff %} · console{% endif %}</span></span>
+            <a class="back-link" href="{% url 'manage_people' %}">Manage &rarr;</a>
+          </div>
+        {% empty %}<p class="hint">No people matched.</p>{% endfor %}
+      </section>
+
+      <section class="card result-card">
+        <h2><i class="bi bi-ui-checks"></i> Elections <span class="count">{{ elections|length }}</span></h2>
+        {% for e in elections %}
+          <div class="result-row">
+            <span><strong>{{ e.title }}</strong> <span class="meta">· {{ e.organization.name }} · {{ e.get_state_display }}</span></span>
+            <a class="back-link" href="{% url 'election_config' e.pk %}">Workspace &rarr;</a>
+          </div>
+        {% empty %}<p class="hint">No elections matched.</p>{% endfor %}
+      </section>
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <span class="empty-icon"><i class="bi bi-search"></i></span>
+      <h2>Search the whole platform</h2>
+      <p class="hint">Type a name, username, email or election title to begin.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

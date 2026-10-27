@@ -1,52 +1,128 @@
 {% extends "base.html" %}
 {% block title %}Audit trail · {{ election.title }}{% endblock %}
 {% block content %}
+<style>
+  /* ---- Audit trail ---- */
+  .audit-head { display: flex; flex-direction: column; gap: 0.55rem; }
+  .chain-ok {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: #047857;
+    font-weight: 650;
+    font-size: 0.875rem;
+    background: var(--success-bg);
+    border: 1px solid #bbf7d0;
+    border-radius: var(--radius-md);
+    padding: 0.8rem 1rem;
+  }
+  .chain-ok i { font-size: 1.15rem; }
+  .seq-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace;
+    font-size: 0.78rem;
+    font-weight: 650;
+    color: var(--text-secondary);
+  }
+  .audit-code {
+    background: var(--bg-secondary);
+    padding: 0.15rem 0.4rem;
+    border-radius: var(--radius-xs);
+    font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace;
+    font-size: 0.72rem;
+    word-break: break-all;
+  }
+  .pager {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.35rem;
+  }
+  .pager .page-info { color: var(--text-tertiary); font-size: 0.82rem; font-weight: 600; }
+  .pager a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--primary-dark);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 650;
+    padding: 0.4rem 0.8rem;
+    border-radius: 9px;
+    border: 1px solid var(--border-color-strong);
+    background: var(--bg-card);
+    transition: var(--transition-fast);
+  }
+  .pager a:hover { background: var(--primary-light); border-color: #a5b4fc; }
+</style>
+
 <div class="admin-content">
-  <h1>Audit trail — {{ election.title }}</h1>
-  <p>
-    <span class="badge {{ election.state_badge }}">{{ election.get_state_display }}</span>
-    &middot; <a href="{% url 'election_config' election.pk %}">&larr; Configuration</a>
-    &middot; <a href="{% url 'audit_export' election.pk %}">Export chain (JSON)</a>
-    <form method="post" action="{% url 'audit_checkpoint' election.pk %}" class="inline">
-      {% csrf_token %}
-      <button class="btn btn-sm btn-outline" type="submit">Sign checkpoint at head</button>
-    </form>
-  </p>
+  <div class="audit-head page-head">
+    <h1>Audit Trail — {{ election.title }}</h1>
+    <div class="meta-row">
+      <span class="badge {% if election.state_badge %}{{ election.state_badge }}{% else %}badge-closed{% endif %}">{{ election.get_state_display }}</span>
+      <a href="{% url 'election_config' election.pk %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to configuration</a>
+    </div>
+    <div class="action-links">
+      <a class="btn btn-sm btn-outline" href="{% url 'audit_export' election.pk %}"><i class="bi bi-download"></i> Export chain (JSON)</a>
+      <form method="post" action="{% url 'audit_checkpoint' election.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline" type="submit"><i class="bi bi-file-earmark-lock"></i> Sign checkpoint at head</button>
+      </form>
+    </div>
+  </div>
 
   <section class="card inline-section">
-    <h2>Chain integrity</h2>
+    <h2 class="panel-title" style="display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 700;"><i class="bi bi-link-45deg" style="color: var(--primary);"></i> Chain Integrity</h2>
     {% if chain.ok %}
-      <p class="check-circle">Hash chain verified: {{ chain.events }} events,
-        head sequence {{ chain.head_seq }}.</p>
+      <div class="chain-ok">
+        <i class="bi bi-shield-check"></i>
+        Hash chain verified: {{ chain.events }} events, head sequence {{ chain.head_seq }}.
+      </div>
     {% else %}
-      <p class="messages error">Chain verification FAILED: {{ chain.error }}
-        (first bad sequence: {{ chain.first_bad_seq }}).</p>
+      <div class="message error">
+        <i class="bi bi-x-circle"></i>
+        <span>Chain verification FAILED: {{ chain.error }} (first bad sequence: {{ chain.first_bad_seq }}).</span>
+      </div>
     {% endif %}
   </section>
 
-  <table>
-    <thead><tr><th>Seq</th><th>When</th><th>Action</th><th>Actor</th><th>Reason / details</th></tr></thead>
-    <tbody>
-      {% for ev in page %}
-        <tr>
-          <td>{{ ev.seq }}</td>
-          <td>{{ ev.created_at|date:"Y-m-d H:i:s" }}</td>
-          <td>{{ ev.action }}</td>
-          <td>{{ ev.actor_label|default:"system" }}</td>
-          <td>{{ ev.reason }} {% if ev.details %}<code>{{ ev.details }}</code>{% endif %}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="5" class="hint">No events recorded yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-sortable data-type="num">Seq</th><th data-sortable>When</th><th data-sortable>Action</th><th data-sortable>Actor</th><th>Reason / details</th></tr></thead>
+      <tbody>
+        {% for ev in page %}
+          <tr>
+            <td><span class="seq-chip">#{{ ev.seq }}</span></td>
+            <td style="white-space: nowrap;">{{ ev.created_at|date:"Y-m-d H:i:s" }}</td>
+            <td><span class="badge badge-category">{{ ev.action }}</span></td>
+            <td>{{ ev.actor_label|default:"system" }}</td>
+            <td>
+              {{ ev.reason }}
+              {% if ev.details %}<br><code class="audit-code">{{ ev.details }}</code>{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><span class="hint">No events recorded yet.</span></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
   {% if page.has_other_pages %}
-    <p class="action-links">
-      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">&larr; newer</a>{% endif %}
-      Page {{ page.number }} of {{ page.paginator.num_pages }}
-      {% if page.has_next %}<a href="?page={{ page.next_page_number }}">older &rarr;</a>{% endif %}
-    </p>
+    <nav class="pager" aria-label="Audit pages">
+      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}"><i class="bi bi-arrow-left"></i> newer</a>{% endif %}
+      <span class="page-info">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a href="?page={{ page.next_page_number }}">older <i class="bi bi-arrow-right"></i></a>{% endif %}
+    </nav>
   {% endif %}
 </div>
 {% endblock %}

@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils.html import escape
 
 from ballot.services import cast_ballot, issue_authorization, prepare_ballot
+from elections.models import Election
 from elections.tests import BaseVotingTestCase
 from organizations.models import OrganizationMembership
 from representatives.models import Representative
@@ -22,7 +23,7 @@ class MonitoringEndpointTests(BaseVotingTestCase):
     def setUp(self):
         self.election, self.position, self.candidates = self.open_election(with_voters=3)
         voter = self.election.voters.first()
-        issue_authorization(voter)
+        issue_authorization(voter, allow_reissue=True, reason="test")
         self.cast = cast_ballot(
             election=self.election,
             voter=voter,
@@ -108,6 +109,176 @@ class MonitoringEndpointTests(BaseVotingTestCase):
         self.assertEqual(
             self.client.get(reverse("monitor", args=[self.election.pk])).status_code, 403
         )
+
+    # -- live results board -----------------------------------------------
+    def test_live_board_staff_sees_candidate_totals(self):
+        self.client.force_login(self.official)
+        r = self.client.get(reverse("live_board", args=[self.election.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Alice A.")
+        self.assertContains(r, 'id="resultsBoard"')
+        self.assertContains(r, 'id="boardSeed"')
+
+        board = r.context["board"]
+        self.assertEqual(board["totals"]["ballots_accepted"], 1)
+        self.assertEqual(board["totals"]["positions"], 1)
+        self.assertEqual(board["state_label"], "Voting open")
+        self.assertTrue(board["health"]["reconciliation_ok"])
+        self.assertEqual(board["health"]["status"], "healthy")
+
+        position = board["positions"][0]
+        self.assertEqual(position["title"], "President")
+        self.assertEqual(position["total_votes"], 1)
+        alice = position["candidates"][0]
+        self.assertEqual(alice["name"], "Alice A.")
+        self.assertEqual(alice["votes"], 1)
+        self.assertEqual(alice["percent"], 100.0)
+        self.assertEqual(alice["rank"], 1)
+        self.assertTrue(alice["leading"])
+        self.assertFalse(alice["tied"])
+
+        body = r.content.decode()
+        self.assertNotIn(self.cast.receipt_code, body)
+        self.assertNotIn("selections", body)
+        self.assertNotIn("V001", body)
+
+    def test_live_board_data_is_aggregate_only_and_refreshes(self):
+        self.client.force_login(self.official)
+        first_response = self.client.get(
+            reverse("live_board_data", args=[self.election.pk])
+        )
+        self.assertEqual(first_response.status_code, 200)
+        first = first_response.json()
+        self.assertEqual(first["totals"]["ballots_accepted"], 1)
+        self.assertIn("Alice A.", first_response.content.decode())
+        self.assertEqual(
+            set(first["health"]),
+            {
+                "status",
+                "label",
+                "detail",
+                "reconciliation_ok",
+                "ballots_invalid",
+                "box_seq",
+                "count_ms",
+                "last_ballot_at",
+                "last_ballot_label",
+                "generated_at",
+            },
+        )
+        body = first_response.content.decode()
+        self.assertNotIn(self.cast.receipt_code, body)
+        self.assertNotIn("selections", body)
+        self.assertNotIn("submission", body)
+        self.assertNotIn("V001", body)
+
+        # The cache is keyed by ballot-box sequence, so a new ballot is visible
+        # on the very next poll rather than after the cache TTL.
+        voter = self.election.voters.filter(has_voted=False).first()
+        issue_authorization(voter, allow_reissue=True, reason="live board refresh test")
+        cast_ballot(
+            election=self.election,
+            voter=voter,
+            submission_id=prepare_ballot(voter, self.election).submission_id,
+            selections={str(self.position.pk): [str(self.candidates[1].pk)]},
+        )
+        second = self.client.get(
+            reverse("live_board_data", args=[self.election.pk])
+        ).json()
+        self.assertEqual(second["totals"]["ballots_accepted"], 2)
+        self.assertEqual(second["health"]["box_seq"], 2)
+        by_name = {
+            candidate["name"]: candidate
+            for candidate in second["positions"][0]["candidates"]
+        }
+        self.assertEqual(by_name["Alice A."]["votes"], 1)
+        self.assertEqual(by_name["Bob B."]["votes"], 1)
+        self.assertEqual(by_name["Alice A."]["percent"], 50.0)
+        self.assertEqual(by_name["Bob B."]["percent"], 50.0)
+        self.assertTrue(by_name["Alice A."]["leading"])
+        self.assertTrue(by_name["Bob B."]["leading"])
+        self.assertTrue(by_name["Alice A."]["tied"])
+        self.assertTrue(by_name["Bob B."]["tied"])
+
+    def test_live_board_follows_results_visibility_policy(self):
+        # Default policy is after-close: non-staff cannot see candidate totals
+        # while the election is open.
+        for user in (self.rep_user, self.observer):
+            self.client.force_login(user)
+            r = self.client.get(reverse("live_board", args=[self.election.pk]))
+            self.assertEqual(r.status_code, 403)
+            r = self.client.get(
+                reverse("live_board_data", args=[self.election.pk])
+            )
+            self.assertEqual(r.status_code, 403)
+
+        self.election.results_visibility = Election.VISIBILITY_LIVE
+        self.election.save(update_fields=["results_visibility"])
+
+        for user in (self.rep_user, self.observer):
+            self.client.force_login(user)
+            r = self.client.get(reverse("live_board", args=[self.election.pk]))
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(
+                self.client.get(
+                    reverse("live_board_data", args=[self.election.pk])
+                ).status_code,
+                200,
+            )
+
+    def test_live_board_available_after_close_to_approved_rep(self):
+        self.election.state = Election.STATE_CLOSED
+        self.election.save(update_fields=["state"])
+        self.client.force_login(self.rep_user)
+        self.assertEqual(
+            self.client.get(
+                reverse("live_board", args=[self.election.pk])
+            ).status_code,
+            200,
+        )
+
+        self.election.results_visibility = Election.VISIBILITY_PRIVATE
+        self.election.save(update_fields=["results_visibility"])
+        self.assertEqual(
+            self.client.get(
+                reverse("live_board", args=[self.election.pk])
+            ).status_code,
+            403,
+        )
+
+    def test_live_board_denied_to_outsiders(self):
+        self.client.force_login(self.outsider)
+        self.assertEqual(
+            self.client.get(
+                reverse("live_board", args=[self.election.pk])
+            ).status_code,
+            403,
+        )
+        self.client.logout()
+        self.assertEqual(
+            self.client.get(
+                reverse("live_board_data", args=[self.election.pk])
+            ).status_code,
+            403,
+        )
+
+    def test_monitor_links_to_board_for_available_users(self):
+        self.client.force_login(self.official)
+        monitor = self.client.get(reverse("monitor", args=[self.election.pk]))
+        self.assertContains(
+            monitor, reverse("live_board", args=[self.election.pk])
+        )
+        self.assertTrue(monitor.context["board_available"])
+
+        # The representative's monitor remains accessible, but the board link
+        # is hidden until the visibility policy permits candidate totals.
+        self.client.force_login(self.rep_user)
+        monitor = self.client.get(reverse("monitor", args=[self.election.pk]))
+        self.assertEqual(monitor.status_code, 200)
+        self.assertNotContains(
+            monitor, reverse("live_board", args=[self.election.pk])
+        )
+        self.assertFalse(monitor.context["board_available"])
 
     # -- audit export -----------------------------------------------------
     def test_audit_export_for_privileged_roles(self):

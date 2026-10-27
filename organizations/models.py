@@ -74,6 +74,7 @@ class OrganizationMembership(models.Model):
 
     ROLE_CHOICES = [
         ("org_admin", "Organization administrator"),
+        ("ec_chair", "Election commission chair"),
         ("election_official", "Election official"),
         ("auditor", "Independent auditor"),
         ("observer", "Observer (read-only, public data)"),

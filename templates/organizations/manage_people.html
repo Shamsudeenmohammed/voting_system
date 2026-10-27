@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}People &amp; access · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- People & access console ---- */
+  .people-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 1.5rem; align-items: start; }
+  .people-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.35rem;
+    position: sticky;
+    top: calc(var(--header-h) + 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .people-panel h2 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.9rem; }
+  .people-panel h2 i { color: var(--primary); }
+  .role-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 650;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color-strong);
+    background: var(--bg-soft);
+    color: var(--text-secondary);
+  }
+  .role-tag.console { background: var(--primary-light); border-color: #c7d2fe; color: var(--primary-dark); }
+  .user-cell strong { font-weight: 650; }
+  .admin-hint { font-size: 0.78rem; color: var(--text-tertiary); line-height: 1.55; }
+  @media (max-width: 1050px) {
+    .people-layout { grid-template-columns: 1fr; }
+    .people-panel { position: static; order: -1; }
+  }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>People &amp; access</h1>
+    <p class="sub">
+      Grant role memberships to control who can configure, run, audit and
+      observe elections. Roles marked <span class="role-tag console"><i class="bi bi-shield-lock"></i> console</span>
+      also gain access to the management console.
+    </p>
+  </div>
+
+  <div class="people-layout">
+    <div class="inline-section">
+      <h2 style="font-size: 1.15rem; font-weight: 650;">Current role assignments</h2>
+      {% if memberships %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Person</th><th>Organization</th><th>Role</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {% for m in memberships %}
+                <tr>
+                  <td class="user-cell">
+                    <strong>{{ m.user.get_username }}</strong>
+                    {% if m.user.get_full_name %}<span class="hint">{{ m.user.get_full_name }}</span>{% endif %}
+                  </td>
+                  <td>{{ m.organization.name }}</td>
+                  <td>
+                    <span class="role-tag {% if m.role in console_roles %}console{% endif %}">
+                      {% if m.role in console_roles %}<i class="bi bi-shield-lock"></i>{% endif %}{{ m.get_role_display }}
+                    </span>
+                  </td>
+                  <td>
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="revoke">
+                      <input type="hidden" name="membership" value="{{ m.pk }}">
+                      <button class="btn btn-xs btn-outline" type="submit" onclick="return confirm('Revoke this role from {{ m.user.get_username|escapejs }}?');"><i class="bi bi-x-circle"></i> Revoke</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card empty-state">
+          <span class="empty-icon"><i class="bi bi-people"></i></span>
+          <h2>No role assignments yet</h2>
+          <p class="hint">Grant the first role using the form on the right.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <aside class="people-panel">
+      <div>
+        <h2><i class="bi bi-person-plus"></i> Grant a role</h2>
+        <form method="post" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="grant">
+          {{ grant_form.as_div }}
+          <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle"></i> Grant role</button>
+        </form>
+      </div>
+
+      <div>
+        <h2><i class="bi bi-person-vcard"></i> Create an account</h2>
+        <form method="post" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="create_user">
+          {{ user_form.as_div }}
+          {% if organizations %}
+            <div class="form-group">
+              <label for="create_org">Organization (optional)</label>
+              <select class="input" name="organization" id="create_org">
+                <option value="">— none —</option>
+                {% for o in organizations %}<option value="{{ o.pk }}">{{ o.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="create_role">Role (optional)</label>
+              <select class="input" name="role" id="create_role">
+                <option value="">— none —</option>
+                {% for value, label in role_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+          {% endif %}
+          <button class="btn btn-primary" type="submit"><i class="bi bi-person-plus"></i> Create account</button>
+          <p class="admin-hint">New accounts get no access until a role is granted.</p>
+        </form>
+      </div>
+
+      <div>
+        <h2><i class="bi bi-info-circle"></i> Role guide</h2>
+        <ul class="login-info" style="box-shadow: none; border: none; padding: 0;">
+          <li><i class="bi bi-shield-fill-check"></i><span><strong>Election commission chair</strong> — oversees the assigned institution's elections: lifecycle, readiness, schedules, polling stations, officials, escalations and (where the governance policy assigns it) certification. Chairs may appoint <em>election officials</em> and <em>observers</em> only.</span></li>
+          <li><i class="bi bi-shield-lock"></i><span><strong>Institution election administrator</strong> — full control of the tenant's elections, including approvals and certification.</span></li>
+          <li><i class="bi bi-shield-lock"></i><span><strong>Election official</strong> — configuration, registry and lifecycle execution.</span></li>
+          <li><i class="bi bi-shield-lock"></i><span><strong>Auditor</strong> — read-only: results, monitoring and audit-chain verification.</span></li>
+          <li><i class="bi bi-eye"></i><span><strong>Observer</strong> — public data only; no console access.</span></li>
+        </ul>
+        <p class="admin-hint" style="margin-top: 0.75rem;">
+          Only the roles you are permitted to grant appear in the forms above. The
+          Super Admin is never scoped to an institution and may grant any role
+          anywhere.
+        </p>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

@@ -1,38 +1,274 @@
 {% extends "base.html" %}
 {% block title %}Representative dashboard{% endblock %}
 {% block content %}
+<style>
+  /* ---- Representative dashboard ---- */
+  .rep-head { display: flex; flex-direction: column; gap: 0.55rem; }
+  .rep-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow-sm);
+    flex-wrap: wrap;
+  }
+  .rep-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+    background: linear-gradient(160deg, var(--primary-light) 0%, #e0e7ff 100%);
+    border: 1px solid #c7d2fe;
+    flex-shrink: 0;
+  }
+  .rep-facts { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+  .rep-facts .rn { font-weight: 700; color: var(--text-primary); font-size: 1rem; letter-spacing: -0.01em; }
+  .rep-facts .rd { font-size: 0.8rem; color: var(--text-tertiary); display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .rep-facts .rd i { color: var(--primary); }
+
+  .turnout-tile {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .turnout-ring {
+    --pct: 0;
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: conic-gradient(var(--primary) calc(var(--pct) * 1%), var(--bg-secondary) 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .turnout-ring::before {
+    content: "";
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    background: var(--bg-card);
+  }
+  .turnout-ring span {
+    position: relative;
+    font-size: 1.05rem;
+    font-weight: 750;
+    color: var(--primary-dark);
+    font-variant-numeric: tabular-nums;
+  }
+  .turnout-numbers { display: flex; flex-direction: column; gap: 0.15rem; }
+  .turnout-numbers .tn { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.03em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .turnout-numbers .tl { font-size: 0.78rem; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .visit-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .visit-item {
+    padding: 0.8rem 1rem;
+    background: var(--bg-soft);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    transition: var(--transition-fast);
+  }
+  .visit-item:hover { border-color: rgb(129 140 248 / 45%); background: var(--primary-light); }
+  .visit-item i { color: var(--primary); }
+
+  /* ---- Next actions ---- */
+  .rep-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+  .rep-action {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-soft);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: var(--transition-fast);
+  }
+  .rep-action i { font-size: 1.15rem; color: var(--primary); }
+  .rep-action .ra-title { font-weight: 650; color: var(--text-primary); font-size: 0.92rem; }
+  .rep-action .ra-sub { font-size: 0.78rem; color: var(--text-tertiary); line-height: 1.45; }
+  .rep-action:hover { border-color: rgb(129 140 248 / 45%); background: var(--primary-light); }
+  .rep-action:focus-visible { outline: none; box-shadow: var(--ring); }
+  .rep-action.is-primary { border-color: #c7d2fe; background: var(--primary-light); }
+
+  /* ---- Reported incidents ---- */
+  .report-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .report-item {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+  }
+  .report-item .rmain { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+  .report-item .rtitle { font-weight: 650; color: var(--text-primary); font-size: 0.9rem; }
+  .report-item .rmeta { font-size: 0.76rem; color: var(--text-tertiary); display: flex; gap: 0.45rem; flex-wrap: wrap; }
+</style>
+
 <div class="admin-content">
-  <h1>Representative dashboard</h1>
-  <p class="hint">{{ rep.full_name }} — for {{ rep.candidate.full_name }} ·
-    {{ election.title }} ·
-    <a href="{% url 'incident_create' election.pk %}">Report an incident</a> ·
-    <a href="{% url 'incident_list' election.pk %}">My incidents</a></p>
+  <div class="rep-head page-head">
+    <h1>Representative Dashboard</h1>
+    <p class="hint" style="margin: 0;">Aggregate monitoring for <strong>{{ election.title }}</strong>.</p>
+  </div>
+
+  <div class="rep-identity">
+    <div class="rep-avatar">{{ rep.full_name|first }}</div>
+    <div class="rep-facts">
+      <span class="rn">{{ rep.full_name }}</span>
+      <span class="rd">
+        <span><i class="bi bi-person"></i> Representing {{ rep.candidate.full_name }}</span>
+        <span>·</span>
+        <span><i class="bi bi-calendar-event"></i> {{ election.title }}</span>
+      </span>
+    </div>
+  </div>
 
   <section class="card inline-section">
-    <h2>Turnout (aggregate)</h2>
-    <p class="stat">{{ turnout.voted }} / {{ turnout.total }} voted
-      ({% if turnout.total %}{{ turnout.percent }}%{% else %}—{% endif %})</p>
-    <p class="hint">Aggregate counts only. Ballots, selections and voter identities are
-      never exposed to representatives.</p>
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-signpost-2" style="color: var(--primary);"></i> What you can do</h2>
+    <p class="hint" style="margin: 0;">You are an accredited representative. You can watch aggregate activity and raise irregularities — ballots and voter identities are never shown to you.</p>
+    <div class="rep-actions">
+      <a class="rep-action is-primary" href="{% url 'incident_create' election.pk %}">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span class="ra-title">Report an incident</span>
+        <span class="ra-sub">Flag an irregularity, objection or dispute at a station</span>
+      </a>
+      <a class="rep-action" href="{% url 'incident_list' election.pk %}">
+        <i class="bi bi-list-task"></i>
+        <span class="ra-title">My reports</span>
+        <span class="ra-sub">{% if open_incidents %}{{ open_incidents }} awaiting resolution{% else %}Track your submissions and their outcome{% endif %}</span>
+      </a>
+      <a class="rep-action" href="{% url 'monitor' election.pk %}">
+        <i class="bi bi-broadcast"></i>
+        <span class="ra-title">My live monitor</span>
+        <span class="ra-sub">{% if live_turnout_visible %}Aggregate turnout &amp; station status{% else %}Aggregate station status (turnout shown after close){% endif %}</span>
+      </a>
+      {% if live_board_visible %}
+        <a class="rep-action" href="{% url 'live_board' election.pk %}">
+          <i class="bi bi-easel2"></i>
+          <span class="ra-title">Live results board</span>
+          <span class="ra-sub">Candidate totals by position, updated as ballots are counted</span>
+        </a>
+      {% endif %}
+      <a class="rep-action" href="{% url 'home' %}">
+        <i class="bi bi-collection"></i>
+        <span class="ra-title">Browse elections</span>
+        <span class="ra-sub">See other open elections and their public pages</span>
+      </a>
+    </div>
   </section>
 
   <section class="card inline-section">
-    <h2>Ballots received per station</h2>
-    <table>
-      <thead><tr><th>Station</th><th>Ballots</th></tr></thead>
-      <tbody>
-        {% for s in stations %}<tr><td>{{ s.station.name }}</td><td>{{ s.ballots }}</td></tr>{% empty %}
-          <tr><td colspan="2" class="hint">No polling stations configured.</td></tr>{% endfor %}
-      </tbody>
-    </table>
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-clipboard-data" style="color: var(--primary);"></i> My reported incidents</h2>
+    <ul class="report-list">
+      {% for incident in my_incidents %}
+        <li class="report-item">
+          <div class="rmain">
+            <span class="rtitle">{{ incident.title }}</span>
+            <span class="rmeta">
+              <span><i class="bi bi-tag"></i> {{ incident.get_category_display }}</span>
+              {% if incident.station %}<span>· <i class="bi bi-building"></i> {{ incident.station.name }}</span>{% endif %}
+              <span>· <i class="bi bi-clock"></i> {{ incident.created_at|date:"Y-m-d H:i" }}</span>
+            </span>
+          </div>
+          <span class="badge {% if incident.status == 'open' %}badge-warning{% elif incident.status == 'acknowledged' %}badge-info{% elif incident.status == 'resolved' %}badge-open{% else %}badge-danger{% endif %}">{{ incident.get_status_display }}</span>
+        </li>
+      {% empty %}
+        <li class="hint">You have not reported any incidents. Use <strong>Report an incident</strong> above if you see a problem.</li>
+      {% endfor %}
+    </ul>
   </section>
 
   <section class="card inline-section">
-    <h2>My accreditation visits</h2>
-    <ul>
-      {% for a in attendance %}<li>Arrived {{ a.arrived_at|date:"Y-m-d H:i" }}{% if a.left_at %} — left {{ a.left_at|date:"H:i" }}{% endif %}</li>{% empty %}
-        <li class="hint">No visits recorded.</li>{% endfor %}
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-people" style="color: var(--primary);"></i> Turnout (aggregate)</h2>
+    <div class="turnout-tile">
+      <div class="turnout-ring" style="--pct: {% if turnout.total %}{{ turnout.percent|floatformat:0 }}{% else %}0{% endif %};" aria-hidden="true">
+        <span>{% if turnout.total %}{{ turnout.percent|floatformat:0 }}%{% else %}—{% endif %}</span>
+      </div>
+      <div class="turnout-numbers">
+        <span class="tn">{{ turnout.voted }} / {{ turnout.total }}</span>
+        <span class="tl">{% if turnout.total %}voted{% else %}no data{% endif %}</span>
+      </div>
+    </div>
+    <p class="hint" style="margin: 0;">Aggregate counts only. Ballots, selections and voter identities are never exposed to representatives.</p>
+  </section>
+
+  <section class="card inline-section">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-building" style="color: var(--primary);"></i> Ballots Received per Station</h2>
+    <div class="table-wrap">
+      <table id="stationTable">
+        <thead><tr><th>Station</th><th style="text-align: right;">Ballots</th><th style="width: 40%;">Share</th></tr></thead>
+        <tbody>
+          {% for s in stations %}
+            <tr data-ballots="{{ s.ballots }}">
+              <td><strong>{{ s.station.name }}</strong></td>
+              <td style="text-align: right; font-weight: 650;">{{ s.ballots }}</td>
+              <td><div class="bar"><div class="fill" style="width: 0%;" data-station-bar></div></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><span class="hint">No polling stations configured.</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card inline-section">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;"><i class="bi bi-clock-history" style="color: var(--primary);"></i> My Accreditation Visits</h2>
+    <ul class="visit-list">
+      {% for a in attendance %}
+        <li class="visit-item">
+          <i class="bi bi-clock-history"></i>
+          <span>Arrived {{ a.arrived_at|date:"Y-m-d H:i" }}{% if a.left_at %} — left {{ a.left_at|date:"H:i" }}{% endif %}</span>
+        </li>
+      {% empty %}
+        <li class="hint">No visits recorded.</li>
+      {% endfor %}
     </ul>
   </section>
 </div>
+
+<script>
+(function () {
+  'use strict';
+  var table = document.getElementById('stationTable');
+  if (!table) return;
+  var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+  var max = 0;
+  rows.forEach(function (r) {
+    var v = parseInt(r.getAttribute('data-ballots'), 10) || 0;
+    if (v > max) max = v;
+  });
+  rows.forEach(function (r) {
+    var v = parseInt(r.getAttribute('data-ballots'), 10) || 0;
+    var fill = r.querySelector('[data-station-bar]');
+    if (fill) {
+      var pct = max > 0 ? Math.round((v / max) * 100) : 0;
+      requestAnimationFrame(function () { fill.style.width = pct + '%'; });
+    }
+  });
+})();
+</script>
 {% endblock %}

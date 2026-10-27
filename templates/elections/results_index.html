@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Results &amp; reports · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Results & reports index ---- */
+  .ri-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+  .ver-badge { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .status-dot { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; }
+  .status-dot i { font-size: 0.7rem; }
+  .status-dot.ok { color: var(--success); }
+  .status-dot.bad { color: var(--danger); }
+</style>
+
+<div class="admin-content">
+  <div class="page-head">
+    <h1>Results &amp; reports</h1>
+    <p class="sub">
+      The latest tally snapshot for every election you can inspect, with its
+      certification state and ballot reconciliation. Open an election's results
+      to verify or export a signed copy. Interim counts are only shown to
+      authorised staff.
+    </p>
+  </div>
+
+  <div class="ri-stats">
+    <div class="stat"><span class="num">{{ rows|length }}</span><span class="label"><i class="bi bi-diagram-3"></i> Elections</span></div>
+    <div class="stat"><span class="num">{{ certified_total }}</span><span class="label"><i class="bi bi-patch-check"></i> Certified</span></div>
+    <div class="stat"><span class="num">{{ published_total }}</span><span class="label"><i class="bi bi-broadcast"></i> Published</span></div>
+  </div>
+
+  {% if rows %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Election</th>
+            <th>State</th>
+            <th data-sortable data-type="num">Version</th>
+            <th>Snapshot</th>
+            <th>Reconciliation</th>
+            <th data-sortable data-type="num">Counted</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <div class="cell-main">
+                  <strong>{{ row.election.title }}</strong>
+                  <span class="hint">{{ row.election.organization.name }}</span>
+                </div>
+              </td>
+              <td><span class="badge {% if row.election.state_badge %}{{ row.election.state_badge }}{% else %}badge-closed{% endif %}">{{ row.election.get_state_display }}</span></td>
+              <td>{% if row.snapshot %}<span class="ver-badge">v{{ row.snapshot.version }}</span>{% else %}<span class="hint">—</span>{% endif %}</td>
+              <td>
+                {% if row.snapshot %}
+                  {% if row.snapshot.status == 'certified' %}<span class="badge badge-open">Certified</span>
+                  {% elif row.snapshot.status == 'superseded' %}<span class="badge badge-closed">Superseded</span>
+                  {% else %}<span class="badge badge-warning">Interim</span>{% endif %}
+                {% else %}
+                  <span class="hint">Not counted</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.snapshot %}
+                  {% if row.snapshot.reconciliation_ok %}
+                    <span class="status-dot ok"><i class="bi bi-check-circle-fill"></i> Balanced</span>
+                  {% else %}
+                    <span class="status-dot bad"><i class="bi bi-exclamation-octagon-fill"></i> Mismatch</span>
+                  {% endif %}
+                {% else %}
+                  <span class="hint">—</span>
+                {% endif %}
+              </td>
+              <td>{% if row.snapshot %}{{ row.snapshot.ballots_counted }}{% else %}<span class="hint">—</span>{% endif %}</td>
+              <td>
+                <div class="action-links">
+                  {% if row.snapshot %}
+                    <a href="{% url 'snapshot_detail' row.election.pk row.snapshot.version %}"><i class="bi bi-eye"></i> Snapshot</a>
+                    <a href="{% url 'verify' row.election.pk row.snapshot.version %}"><i class="bi bi-shield-check"></i> Verify</a>
+                    <a href="{% url 'export_snapshot' row.election.pk row.snapshot.version %}"><i class="bi bi-download"></i> Export</a>
+                  {% endif %}
+                  <a href="{% url 'results' row.election.pk %}"><i class="bi bi-bar-chart"></i> Results</a>
+                  <a href="{% url 'election_config' row.election.pk %}"><i class="bi bi-sliders"></i> Workspace</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      <span class="empty-icon"><i class="bi bi-bar-chart-line"></i></span>
+      <h2>No results to show</h2>
+      <p class="hint">You do not have any elections with result access yet.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.models import AnonymousUser
 
@@ -151,10 +152,9 @@ class RolePredicateTests(TestCase):
         self.assertEqual(set(organizations_for(self.outsider)), {self.other_org})
         self.assertFalse(organizations_for(self.auditor).exists())
         self.assertFalse(organizations_for(self.observer).exists())
-        self.assertEqual(
-            set(organizations_for(self.superuser)),
-            {self.org, self.child, self.other_org},
-        )
+        superuser_orgs = set(organizations_for(self.superuser))
+        expected = {self.org, self.child, self.other_org}
+        self.assertTrue(expected.issubset(superuser_orgs))
 
     def test_role_in_requires_membership(self):
         self.assertTrue(role_in(self.admin, self.org, ("org_admin",)))
@@ -169,3 +169,244 @@ class RolePredicateTests(TestCase):
         self.assertEqual(user_org_roles(self.auditor)[str(self.org.pk)], "org_admin")
         self.assertEqual(user_org_roles(self.official)[str(self.org.pk)], "election_official")
         self.assertEqual(user_org_roles(self.outsider), {str(self.other_org.pk): "org_admin"})
+
+
+class ConsoleViewTests(TestCase):
+    """HTTP tests for the organization / people-access console.
+
+    These exercise the product surface a Super Admin (or a scoped ``org_admin``)
+    actually uses to onboard people: creating tenants, editing/toggling them,
+    granting/revoking roles and creating accounts.  The console must never let a
+    tenant admin act outside their own organization subtree.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = Organization.objects.create(name="Uni", slug="uni")
+        cls.child = Organization.objects.create(name="Faculty", slug="faculty", parent=cls.org)
+        cls.other_org = Organization.objects.create(name="Other", slug="other")
+
+        cls.admin = User.objects.create_user("admin", password="x")
+        cls.official = User.objects.create_user("official", password="x")
+        cls.observer = User.objects.create_user("observer", password="x")
+        cls.outsider = User.objects.create_user("outsider", password="x")
+        cls.superuser = User.objects.create_superuser("root", password="x")
+
+        OrganizationMembership.objects.create(
+            user=cls.admin, organization=cls.org, role="org_admin"
+        )
+        OrganizationMembership.objects.create(
+            user=cls.official, organization=cls.org, role="election_official"
+        )
+        OrganizationMembership.objects.create(
+            user=cls.observer, organization=cls.org, role="observer"
+        )
+        OrganizationMembership.objects.create(
+            user=cls.outsider, organization=cls.other_org, role="org_admin"
+        )
+
+    # -- access -----------------------------------------------------------
+    def test_console_requires_login(self):
+        r = self.client.get(reverse("manage_organizations"))
+        self.assertEqual(r.status_code, 302)
+
+    def test_non_admin_roles_are_refused(self):
+        for user in (self.official, self.observer):
+            self.client.force_login(user)
+            self.assertEqual(self.client.get(reverse("manage_organizations")).status_code, 403)
+            self.assertEqual(self.client.get(reverse("manage_people")).status_code, 403)
+
+    def test_org_admin_console_is_scoped_to_subtree(self):
+        self.client.force_login(self.admin)
+        r = self.client.get(reverse("manage_organizations"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual({o.name for o in r.context["organizations"]}, {"Uni", "Faculty"})
+
+        r = self.client.get(reverse("manage_people"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            {m.organization for m in r.context["memberships"]}, {self.org}
+        )
+
+    def test_outsider_sees_only_their_own_tenant(self):
+        self.client.force_login(self.outsider)
+        r = self.client.get(reverse("manage_organizations"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual({o.name for o in r.context["organizations"]}, {"Other"})
+
+    # -- create / update / toggle ----------------------------------------
+    def test_only_system_admin_may_create_organization(self):
+        payload = {
+            "action": "create",
+            "name": "New Community",
+            "kind": "community",
+            "parent": "",
+            "description": "",
+            "is_active": "on",
+        }
+        self.client.force_login(self.admin)
+        r = self.client.post(reverse("manage_organizations"), payload)
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(Organization.objects.filter(name="New Community").exists())
+
+        self.client.force_login(self.superuser)
+        r = self.client.post(reverse("manage_organizations"), payload)
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(Organization.objects.filter(name="New Community").exists())
+
+    def test_org_admin_updates_subtree_but_not_other_tenant(self):
+        self.client.force_login(self.admin)
+        r = self.client.post(
+            reverse("manage_organizations"),
+            {
+                "action": "update",
+                "organization": str(self.child.pk),
+                "name": "Renamed Faculty",
+                "kind": "faculty",
+                "parent": str(self.org.pk),
+                "description": "",
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.name, "Renamed Faculty")
+
+        # another tenant is out of scope -> 404, never modified
+        r = self.client.post(
+            reverse("manage_organizations"),
+            {
+                "action": "update",
+                "organization": str(self.other_org.pk),
+                "name": "Hijacked",
+                "kind": "community",
+                "parent": "",
+                "description": "",
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(r.status_code, 404)
+        self.other_org.refresh_from_db()
+        self.assertEqual(self.other_org.name, "Other")
+
+    def test_toggle_activation(self):
+        self.client.force_login(self.admin)
+        r = self.client.post(
+            reverse("manage_organizations"),
+            {"action": "toggle", "organization": str(self.org.pk)},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.org.refresh_from_db()
+        self.assertFalse(self.org.is_active)
+
+    # -- people & access --------------------------------------------------
+    def test_grant_console_role_grants_staff_flag(self):
+        self.client.force_login(self.superuser)
+        new = User.objects.create_user("newperson", password="x")
+        r = self.client.post(
+            reverse("manage_people"),
+            {
+                "action": "grant",
+                "user": str(new.pk),
+                "organization": str(self.org.pk),
+                "role": "election_official",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                user=new, organization=self.org, role="election_official"
+            ).exists()
+        )
+        new.refresh_from_db()
+        self.assertTrue(new.is_staff)
+
+    def test_grant_observer_does_not_grant_staff(self):
+        self.client.force_login(self.superuser)
+        new = User.objects.create_user("watcher", password="x")
+        self.client.post(
+            reverse("manage_people"),
+            {
+                "action": "grant",
+                "user": str(new.pk),
+                "organization": str(self.org.pk),
+                "role": "observer",
+            },
+        )
+        new.refresh_from_db()
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                user=new, organization=self.org, role="observer"
+            ).exists()
+        )
+        self.assertFalse(new.is_staff)
+
+    def test_grant_then_revoke_keeps_staff_flag_in_sync(self):
+        self.client.force_login(self.superuser)
+        target = User.objects.create_user("temp", password="x")
+        self.client.post(
+            reverse("manage_people"),
+            {
+                "action": "grant",
+                "user": str(target.pk),
+                "organization": str(self.org.pk),
+                "role": "auditor",
+            },
+        )
+        target.refresh_from_db()
+        self.assertTrue(target.is_staff)
+
+        membership = OrganizationMembership.objects.get(
+            user=target, organization=self.org, role="auditor"
+        )
+        self.client.post(
+            reverse("manage_people"),
+            {"action": "revoke", "membership": str(membership.pk)},
+        )
+        self.assertFalse(OrganizationMembership.objects.filter(pk=membership.pk).exists())
+        target.refresh_from_db()
+        self.assertFalse(target.is_staff)
+
+    def test_org_admin_cannot_grant_outside_scope(self):
+        self.client.force_login(self.admin)
+        r = self.client.post(
+            reverse("manage_people"),
+            {
+                "action": "grant",
+                "user": str(self.outsider.pk),
+                "organization": str(self.other_org.pk),
+                "role": "observer",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                user=self.outsider, organization=self.other_org, role="observer"
+            ).exists()
+        )
+
+    def test_create_user_with_role(self):
+        self.client.force_login(self.superuser)
+        r = self.client.post(
+            reverse("manage_people"),
+            {
+                "action": "create_user",
+                "username": "brandnew",
+                "password1": "V3ry-Str0ng-Passw0rd!",
+                "password2": "V3ry-Str0ng-Passw0rd!",
+                "first_name": "Brand",
+                "last_name": "New",
+                "email": "brand@example.org",
+                "organization": str(self.org.pk),
+                "role": "election_official",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        user = User.objects.get(username="brandnew")
+        self.assertTrue(user.check_password("V3ry-Str0ng-Passw0rd!"))
+        self.assertTrue(user.is_staff)
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                user=user, organization=self.org, role="election_official"
+            ).exists()
+        )

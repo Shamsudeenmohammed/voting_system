@@ -1,29 +1,71 @@
 {% extends "base.html" %}
 {% block title %}{{ org.name }} · Overview{% endblock %}
 {% block content %}
+<style>
+  /* ---- Organization overview ---- */
+  .org-head { display: flex; flex-direction: column; gap: 0.6rem; }
+  .org-switch { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .org-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color-strong);
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    transition: var(--transition-fast);
+  }
+  .org-pill:hover { background: var(--primary-light); border-color: #a5b4fc; color: var(--primary-dark); }
+  .org-pill.current {
+    background: var(--navy-900);
+    border-color: var(--navy-900);
+    color: #fff;
+    pointer-events: none;
+  }
+</style>
+
 <div class="admin-content">
-  <h1>{{ org.name }}</h1>
-  <p class="hint">Organization overview
-    {% for o in orgs %}{% if o.pk != org.pk %} · <a href="?org={{ o.pk }}">{{ o.name }}</a>{% endif %}{% endfor %}
-  </p>
-  <table>
-    <thead><tr><th>Election</th><th>State</th><th>Voters</th><th></th></tr></thead>
-    <tbody>
-      {% for e in elections %}
-        <tr>
-          <td>{{ e.title }}</td>
-          <td><span class="badge {{ e.state_badge }}">{{ e.get_state_display }}</span></td>
-          <td>{{ e.voter_count }}</td>
-          <td class="action-links">
-            <a href="{% url 'monitor' e.pk %}">Monitor</a>
-            <a href="{% url 'election_audit' e.pk %}">Audit</a>
-            <a href="{% url 'results' e.pk %}">Results</a>
-          </td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="4" class="hint">No elections in this organization yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="org-head page-head">
+    <h1><i class="bi bi-building" style="color: var(--primary);"></i> {{ org.name }}</h1>
+    <p class="sub">Organization overview</p>
+    {% if orgs|length > 1 %}
+      <div class="org-switch" role="navigation" aria-label="Switch organization">
+        <span class="hint">Switch:</span>
+        {% for o in orgs %}
+          {% if o.pk != org.pk %}
+            <a class="org-pill" href="?org={{ o.pk }}"><i class="bi bi-building"></i> {{ o.name }}</a>
+          {% else %}
+            <span class="org-pill current"><i class="bi bi-building"></i> {{ o.name }}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-sortable>Election</th><th data-sortable>State</th><th data-sortable data-type="num">Voters</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for e in elections %}
+          <tr>
+            <td><strong>{{ e.title }}</strong></td>
+            <td><span class="badge {% if e.state_badge %}{{ e.state_badge }}{% else %}badge-closed{% endif %}">{{ e.get_state_display }}</span></td>
+            <td>{{ e.voter_count }}</td>
+            <td class="action-links">
+              <a href="{% url 'monitor' e.pk %}"><i class="bi bi-broadcast"></i> Monitor</a>
+              <a href="{% url 'election_audit' e.pk %}"><i class="bi bi-file-earmark-text"></i> Audit</a>
+              <a href="{% url 'results' e.pk %}"><i class="bi bi-bar-chart"></i> Results</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4"><span class="hint">No elections in this organization yet.</span></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

@@ -1,35 +1,295 @@
 {% extends "base.html" %}
 {% block title %}Elections · VoteSys{% endblock %}
 {% block content %}
+<style>
+  /* ---- Landing / elections list ---- */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-800) 55%, #23246b 100%);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--radius-xl);
+    padding: 2.5rem 2.25rem;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: -80px;
+    top: -80px;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgb(99 102 241 / 35%) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    left: 35%;
+    bottom: -140px;
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgb(56 189 248 / 18%) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero > * { position: relative; z-index: 1; }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    align-self: flex-start;
+    background: rgb(255 255 255 / 10%);
+    border: 1px solid rgb(255 255 255 / 16%);
+    color: #c7d2fe;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+  }
+  .hero h1 {
+    font-size: clamp(1.6rem, 3.5vw, 2.3rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.12;
+    margin: 0;
+  }
+  .hero p {
+    color: rgb(226 232 240 / 85%);
+    font-size: 0.95rem;
+    max-width: 62ch;
+    margin: 0;
+  }
+  .hero-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #dbeafe;
+    background: rgb(255 255 255 / 8%);
+    border: 1px solid rgb(255 255 255 / 14%);
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+  }
+
+  .list-toolbar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .list-toolbar .search-box { flex: 1 1 240px; max-width: 380px; }
+  .filter-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border-color-strong);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .chip:hover { border-color: #a5b4fc; color: var(--primary-dark); background: var(--primary-light); }
+  .chip:focus-visible { outline: none; box-shadow: var(--ring); }
+  .chip[aria-pressed="true"] {
+    background: var(--navy-900);
+    border-color: var(--navy-900);
+    color: #fff;
+  }
+  .chip[aria-pressed="true"] i { color: #a5b4fc; }
+
+  .result-count { font-size: 0.8rem; color: var(--text-tertiary); font-weight: 550; }
+
+  .election-card.hidden-card { display: none; }
+
+  /* Voter guidance */
+  .guide-steps {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    counter-reset: step;
+  }
+  .guide-steps li {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+  .guide-steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 750;
+    font-size: 0.8rem;
+    color: #fff;
+    background: linear-gradient(160deg, var(--primary-hover) 0%, var(--primary-dark) 100%);
+  }
+  .guide-steps li strong { color: var(--text-primary); display: block; }
+
+  @media (max-width: 768px) {
+    .hero { padding: 1.75rem 1.35rem; border-radius: var(--radius-lg); }
+    .list-toolbar { flex-direction: column; align-items: stretch; }
+    .list-toolbar .search-box { max-width: none; }
+  }
+</style>
+
 <div class="admin-content">
-  <h1>Current elections</h1>
-  <p class="hint">Open an election to vote, follow its progress or (after
-    publication) verify the certified results.</p>
+  <section class="hero">
+    <span class="hero-eyebrow"><i class="bi bi-shield-lock"></i> Secret ballot · Publicly verifiable</span>
+    <h1>Cast your vote with confidence</h1>
+    <p>Open an election to vote, follow its progress in real time, or verify certified results after publication — every ballot is auditable, none is traceable to you.</p>
+    <div class="hero-badges">
+      <span class="hero-badge"><i class="bi bi-lock"></i> End-to-end secret</span>
+      <span class="hero-badge"><i class="bi bi-file-earmark-check"></i> Hash-chained audit</span>
+      <span class="hero-badge"><i class="bi bi-person-check"></i> Observer monitored</span>
+    </div>
+  </section>
+
+  <section class="card inline-section">
+    <h2 style="font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+      <i class="bi bi-info-circle" style="color: var(--primary);"></i> How voting works
+    </h2>
+    <ol class="guide-steps">
+      <li><div><strong>Open an election</strong> Choose a live election and select <em>Vote now</em>.</div></li>
+      <li><div><strong>Identify yourself</strong> Enter your voter ID to receive a single-use, anonymous ballot.</div></li>
+      <li><div><strong>Make your choices</strong> Your selections are sealed and never linked to your identity.</div></li>
+      <li><div><strong>Keep your receipt</strong> Use the receipt code to confirm your ballot was counted — without revealing it.</div></li>
+    </ol>
+    <p class="hint" style="margin: 0;">
+      Already voted? Verify a receipt on the election's page. Results are only
+      shown once an election is certified and published.
+    </p>
+  </section>
 
   {% if elections %}
-    <div class="grid">
+    <div class="list-toolbar">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input class="input" type="search" id="electionSearch" placeholder="Search elections…" aria-label="Search elections">
+      </div>
+      <div class="filter-chips" role="group" aria-label="Filter by state">
+        <button type="button" class="chip" data-filter="all" aria-pressed="true"><i class="bi bi-grid"></i> All</button>
+        <button type="button" class="chip" data-filter="badge-open" aria-pressed="false"><i class="bi bi-unlock"></i> Open</button>
+        <button type="button" class="chip" data-filter="badge-closed" aria-pressed="false"><i class="bi bi-lock"></i> Closed</button>
+        <button type="button" class="chip" data-filter="badge-category" aria-pressed="false"><i class="bi bi-clock"></i> Scheduled</button>
+      </div>
+      <span class="result-count" id="resultCount" aria-live="polite"></span>
+    </div>
+
+    <div class="grid" id="electionGrid">
       {% for e in elections %}
-        <div class="election-card card">
-          <h2><a href="{% url 'election_detail' e.pk %}">{{ e.title }}</a></h2>
-          <p><span class="badge {{ e.state_badge }}">{{ e.get_state_display }}</span>
-             &middot; {{ e.get_category_display }}</p>
-          <p class="hint">{{ e.start_at|date:"Y-m-d H:i" }} &rarr; {{ e.end_at|date:"Y-m-d H:i" }}</p>
-          {% if e.state == e.STATE_OPEN %}
-            <a class="btn btn-primary" href="{% url 'voter_access' e.pk %}">Vote now</a>
-          {% endif %}
-          {% if e.state == e.STATE_PUBLISHED %}
-            <a class="btn btn-success" href="{% url 'results' e.pk %}">Results</a>
-          {% endif %}
-          <a class="btn btn-outline" href="{% url 'receipt_lookup' e.pk %}">Verify receipt</a>
+        <div class="election-card" data-state="{% if e.state_badge %}{{ e.state_badge }}{% else %}badge-state-closed{% endif %}">
+          <h3><a href="{% url 'election_detail' e.pk %}">{{ e.title }}</a></h3>
+          <div class="meta-row">
+            <span class="badge {% if e.state_badge %}{{ e.state_badge }}{% else %}badge-closed{% endif %}">{{ e.get_state_display }}</span>
+            <span class="hint">{{ e.get_category_display }}</span>
+          </div>
+          <p class="hint"><i class="bi bi-calendar-event"></i> {{ e.start_at|date:"Y-m-d H:i" }} &rarr; {{ e.end_at|date:"Y-m-d H:i" }}</p>
+          <div class="card-actions">
+            {% if e.state == e.STATE_OPEN %}
+              <span class="hint"><i class="bi bi-geo-alt"></i> Voting takes place in person at a designated polling station.</span>
+            {% endif %}
+            {% if e.state == e.STATE_PUBLISHED %}
+              <a class="btn btn-success" href="{% url 'results' e.pk %}"><i class="bi bi-bar-chart"></i> Results</a>
+            {% endif %}
+            <a class="btn btn-outline btn-sm" href="{% url 'receipt_lookup' e.pk %}"><i class="bi bi-search"></i> Verify receipt</a>
+            <a class="btn btn-outline btn-sm" href="{% url 'election_detail' e.pk %}"><i class="bi bi-info-circle"></i> Details</a>
+          </div>
         </div>
       {% endfor %}
     </div>
+
+    <div class="card empty-state" id="noMatches" hidden>
+      <span class="empty-icon"><i class="bi bi-search"></i></span>
+      <h2>No matching elections</h2>
+      <p class="hint">Try a different search term or clear the filters.</p>
+    </div>
   {% else %}
-    <p>No elections are currently open, scheduled or published.</p>
+    <div class="card empty-state">
+      <span class="empty-icon"><i class="bi bi-calendar-x"></i></span>
+      <h2>No elections found</h2>
+      <p class="hint">No elections are currently open, scheduled, or published.</p>
+      {% if user.is_authenticated and user.is_staff %}
+        <a class="btn btn-primary" href="{% url 'dashboard' %}"><i class="bi bi-plus-circle"></i> Manage elections</a>
+      {% endif %}
+    </div>
   {% endif %}
 
   {% if user.is_authenticated and user.is_staff %}
-    <p><a class="btn btn-outline" href="{% url 'dashboard' %}">Manage elections</a></p>
+    <div class="toolbar">
+      <a class="btn btn-outline" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Election dashboard</a>
+    </div>
   {% endif %}
 </div>
+
+{% if elections %}
+<script>
+(function () {
+  'use strict';
+  var search = document.getElementById('electionSearch');
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip[data-filter]'));
+  var grid = document.getElementById('electionGrid');
+  var cards = grid ? Array.prototype.slice.call(grid.querySelectorAll('.election-card')) : [];
+  var countEl = document.getElementById('resultCount');
+  var noMatches = document.getElementById('noMatches');
+  var activeFilter = 'all';
+
+  function apply() {
+    var q = (search ? search.value : '').trim().toLowerCase();
+    var visible = 0;
+    cards.forEach(function (card) {
+      var state = card.getAttribute('data-state') || '';
+      var text = card.textContent.toLowerCase();
+      var stateOk = activeFilter === 'all' ||
+        state === activeFilter ||
+        (activeFilter !== 'all' && state.indexOf(activeFilter.replace('badge-', '')) !== -1);
+      var textOk = !q || text.indexOf(q) !== -1;
+      var show = stateOk && textOk;
+      card.classList.toggle('hidden-card', !show);
+      if (show) visible++;
+    });
+    if (countEl) countEl.textContent = visible + ' of ' + cards.length + ' election' + (cards.length === 1 ? '' : 's');
+    if (noMatches) noMatches.hidden = visible !== 0 || cards.length === 0;
+    if (grid) grid.hidden = visible === 0;
+  }
+
+  if (search) search.addEventListener('input', apply);
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      activeFilter = chip.getAttribute('data-filter');
+      chips.forEach(function (c) { c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'); });
+      apply();
+    });
+  });
+  apply();
+})();
+</script>
+{% endif %}
 {% endblock %}

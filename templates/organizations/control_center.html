@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Super Admin control centre · VoteSys{% endblock %}
+{% block content %}
+<style>
+  /* ---- Super Admin control centre ---- */
+  .cc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.35rem; align-items: start; }
+  .cc-card { display: flex; flex-direction: column; gap: 0.4rem; }
+  .cc-card > h2 {
+    font-size: 1.02rem; font-weight: 700; display: flex; align-items: center;
+    gap: 0.5rem; margin: 0 0 0.5rem; letter-spacing: -0.01em;
+  }
+  .cc-card > h2 i { color: var(--primary); }
+  .health-row {
+    display: flex; align-items: flex-start; gap: 0.6rem;
+    padding: 0.6rem 0; border-bottom: 1px dashed var(--border-color);
+    font-size: 0.85rem; line-height: 1.5;
+  }
+  .health-row:last-child { border-bottom: none; }
+  .health-row i.ok { color: var(--success); }
+  .health-row i.bad { color: var(--danger); }
+  .health-row .k { font-weight: 650; }
+  .health-row .d { color: var(--text-tertiary); }
+  .alert-item { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.75rem 0.85rem; border-radius: var(--radius-md); border: 1px solid; font-size: 0.85rem; line-height: 1.55; margin-bottom: 0.6rem; }
+  .alert-item:last-child { margin-bottom: 0; }
+  .alert-item i { font-size: 1.05rem; margin-top: 0.1rem; flex-shrink: 0; }
+  .alert-item.danger { background: var(--danger-bg); border-color: #fecaca; color: #991b1b; }
+  .alert-item.warning { background: var(--warning-bg); border-color: #fde68a; color: #92400e; }
+  .alert-item.info { background: var(--info-bg); border-color: #bfdbfe; color: #1e40af; }
+  .alert-item .a-title { font-weight: 650; display: block; }
+  .setting-row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px dashed var(--border-color); font-size: 0.85rem; }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row .k { color: var(--text-tertiary); }
+  .setting-row .v { font-weight: 600; text-align: right; }
+</style>
+
+<div class="admin-content">
+  <div class="page-head-row">
+    <div class="page-head">
+      <h1><i class="bi bi-shield-fill-check"></i> Super Admin control centre</h1>
+      <p class="sub">
+        A single, system-wide operations view for the Super Admin: deployment
+        health, operational alerts, the override ledger and explicit recovery
+        actions. This does not add authority — it concentrates the authority a
+        Super Admin already has and records every sensitive action.
+      </p>
+    </div>
+    <div class="toolbar">
+      <a class="btn btn-outline btn-sm" href="{% url 'control_center_search' %}"><i class="bi bi-search"></i> System search</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'control_center_overrides' %}"><i class="bi bi-exclamation-octagon"></i> Overrides log</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'control_center_recovery' %}"><i class="bi bi-life-preserver"></i> Recovery</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'workstation-manage' %}"><i class="bi bi-pc-display"></i> Workstations</a>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="num">{{ counts.organizations }}</span><span class="label"><i class="bi bi-building"></i> Organizations</span></div>
+    <div class="stat"><span class="num">{{ counts.elections }}</span><span class="label"><i class="bi bi-ui-checks"></i> Elections</span></div>
+    <div class="stat"><span class="num">{{ counts.users }}</span><span class="label"><i class="bi bi-people"></i> Users</span></div>
+    <div class="stat"><span class="num">{{ counts.pending_approvals }}</span><span class="label"><i class="bi bi-hourglass-split"></i> Pending approvals</span></div>
+  </div>
+
+  {% if alerts %}
+    <section class="card cc-card">
+      <h2><i class="bi bi-bell"></i> Operational alerts</h2>
+      {% for a in alerts %}
+        <div class="alert-item {{ a.level }}">
+          <i class="bi {% if a.level == 'danger' %}bi-exclamation-octagon-fill{% elif a.level == 'warning' %}bi-exclamation-triangle-fill{% else %}bi-info-circle-fill{% endif %}"></i>
+          <span><span class="a-title">{{ a.title }}</span>{{ a.detail }}
+            {% if a.url_name %}<a href="{% url a.url_name %}">Review &rarr;</a>{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  <div class="cc-grid">
+    <section class="card cc-card">
+      <h2><i class="bi bi-activity"></i> System health</h2>
+      {% for c in checks %}
+        <div class="health-row">
+          <i class="bi {% if c.ok %}bi-check-circle-fill ok{% else %}bi-x-circle-fill bad{% endif %}"></i>
+          <span><span class="k">{{ c.label }}</span><br><span class="d">{{ c.detail }}</span></span>
+        </div>
+      {% endfor %}
+    </section>
+
+    <section class="card cc-card">
+      <h2><i class="bi bi-pie-chart"></i> Platform data</h2>
+      <div class="setting-row"><span class="k">Active organizations</span><span class="v">{{ counts.active_organizations }} / {{ counts.organizations }}</span></div>
+      <div class="setting-row"><span class="k">Open elections</span><span class="v">{{ counts.open_elections }} / {{ counts.elections }}</span></div>
+      <div class="setting-row"><span class="k">Super Admins</span><span class="v">{{ counts.superusers }}</span></div>
+      <div class="setting-row"><span class="k">Console (staff) users</span><span class="v">{{ counts.staff_users }} / {{ counts.users }}</span></div>
+      <div class="setting-row"><span class="k">Role memberships</span><span class="v">{{ counts.memberships }}</span></div>
+      {% for rc in role_counts %}
+        <div class="setting-row"><span class="k">{{ rc.role }}</span><span class="v">{{ rc.total }}</span></div>
+      {% endfor %}
+    </section>
+
+    <section class="card cc-card">
+      <h2><i class="bi bi-exclamation-octagon"></i> Recent overrides</h2>
+      {% if recent_overrides %}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Actor</th><th>Election</th><th>Transition</th></tr></thead>
+            <tbody>
+              {% for ev in recent_overrides %}
+                <tr>
+                  <td>{{ ev.created_at|date:"Y-m-d H:i" }}</td>
+                  <td>{{ ev.actor_label|default:"—" }}</td>
+                  <td>{% if ev.election %}{{ ev.election.title }}{% else %}—{% endif %}</td>
+                  <td><code>{{ ev.details.from }} &rarr; {{ ev.details.to }}</code></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="hint">No emergency overrides have been recorded. That is the expected state.</p>
+      {% endif %}
+      <a class="btn btn-outline btn-sm" href="{% url 'control_center_overrides' %}"><i class="bi bi-journal-text"></i> Full ledger</a>
+    </section>
+
+    <section class="card cc-card">
+      <h2><i class="bi bi-box-arrow-up-right"></i> All modules</h2>
+      <div class="action-links" style="flex-direction: column; align-items: stretch;">
+        <a class="btn btn-outline btn-sm" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Elections console</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'chair_dashboard' %}"><i class="bi bi-clipboard-check"></i> Election oversight</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'operations' %}"><i class="bi bi-clipboard-pulse"></i> Needs attention</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'approvals_inbox' %}"><i class="bi bi-shield-check"></i> Approvals</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'manage_organizations' %}"><i class="bi bi-buildings"></i> Organizations</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'manage_people' %}"><i class="bi bi-people"></i> People &amp; access</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'results_index' %}"><i class="bi bi-bar-chart-line"></i> Results &amp; reports</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'audit_overview' %}"><i class="bi bi-shield-lock"></i> Audit</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'settings_overview' %}"><i class="bi bi-sliders2"></i> System settings</a>
+        <a class="btn btn-outline btn-sm" href="/watch/"><i class="bi bi-gear"></i> Django admin</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
